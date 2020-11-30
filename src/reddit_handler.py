@@ -1,4 +1,5 @@
 import datetime
+from dateutil.relativedelta import relativedelta
 import time
 import requests
 import json
@@ -10,20 +11,25 @@ class RedditHandler:
     class responsible for extracting and processing reddit data and the creation of users' network
     '''
     def __init__(self, out_folder, categories, start_date, end_date, n_months=1, post_attributes=['author', 'created_utc', 'id', 'num_comments', 'over_18', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title'], comment_attributes=['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score']):
-        ''' TODO: Aggiorna params
+        '''
         Parameters
         ----------
         out_folder : str
             path of the output folder
-        subreddits : list
-            list of subreddits' names to be selected 
+        categories: dict
+            dict with category name as key and list of subreddits in that category as value
         start_date : str
             beginning date in format %d/%m/%Y
         end_date : str
             end date in format %d/%m/%Y
+        n_months: int
+            integer inicating the time period considered 
         post_attributes : list, optional
             post's attributes to be selected. The default is ['author', 'created_utc', 'id', 'num_comments', 'over_18', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title'].
+        comment_attributes: list, optional
+            comment's attributes to be selected. The default is ['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score']
         '''
+
         self.out_folder = out_folder
         if not os.path.exists(self.out_folder):
             os.mkdir(self.out_folder)
@@ -31,6 +37,7 @@ class RedditHandler:
         # transforming date in a suitable format for folder name (category)
         self.pretty_start_date = start_date.replace('/','-')
         self.pretty_end_date = end_date.replace('/','-')
+        self.real_start_date = start_date # TODO metti nome piu carino
         # converting date from format %d/%m/%Y to UNIX timestamp as requested by API
         self.start_date = int(time.mktime(datetime.datetime.strptime(start_date, "%d/%m/%Y").timetuple()))
         self.end_date = int(time.mktime(datetime.datetime.strptime(end_date, "%d/%m/%Y").timetuple()))
@@ -69,32 +76,39 @@ class RedditHandler:
         i = 0 #to iter over categories keys
         for category in self.categories.keys():
             print(f'Extracting category: {categories_keys[i]}')
-            print('subs in category:', self.categories[category] ) 
-            print('ACTUAL_DATE', self.pretty_start_date)
             users = {} #users with post & comment shared in different subreddit belonging to the same category
             for sub in self.categories[category]:
                 print(f'Extracting subbredit: {sub}')
                 current_date_post = self.start_date
                 current_date_comment = self.start_date
-                # TODO period = (self.start_date, aumenta di n_months)
+                # handling time-period
+                end_period = datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y") + relativedelta(months=+n_months)
+                period_post = (datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y"), end_period)
+                period_comment = (datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y"), end_period)
+                # first call to API
                 posts = self._post_request_API(current_date_post, self.end_date, sub) 
                 comments = self._comment_request_API(current_date_post, self.end_date, sub) 
+                # extracting posts
                 while len(posts) > 0: #collecting data until reaching the end_date
                     # TODO: check if sub exists!
-                    '''if current_date >= period[1]:
-                        period = (period[1],aumenta di n_months)'''
                     for raw_post in posts: 
                         if raw_post['author'] not in ['[deleted]', 'AutoModerator']: # discarding data concerning removed users and moderators
                             user_id = raw_post['author']
                             if user_id not in users.keys():
                                 users[user_id] = {'posts':[], 'comments':[]}
-                            # selecting attributes
-                            post = dict()
+                            post = dict() #dict to store posts
+                            # adding field category
                             post['category'] = category
-                            # date in a readable format
-                            post['date'] = datetime.datetime.utcfromtimestamp(raw_post['created_utc']).strftime('%Y-%m-%d')
-                                # TODO: post['time_period'] = period
-                                # TODO: mettici range temporale post['time_period']=boh
+                            # adding field date in a readable format
+                            post['date'] = datetime.datetime.utcfromtimestamp(raw_post['created_utc']).strftime("%d/%m/%Y")
+                            # adding field time_period in a readable format
+                            if datetime.datetime.strptime(post['date'], "%d/%m/%Y") >= period_post[1]:
+                                period_post = (period_post[1], period_post[1] + relativedelta(months=+n_months))
+                            if self.n_months != 0: 
+                                post['time_period'] = (period_post[0].strftime('%m/%d/%Y'), period_post[1].strftime('%m/%d/%Y')) 
+                            else:
+                                post['time_period'] = (datetime.datetime.utcfromtimestamp(self.start_date).strftime("%d/%m/%Y"),datetime.datetime.utcfromtimestamp(self.end_date).strftime("%d/%m/%Y"))
+                            # selecting fields 
                             for attr in self.post_attributes: 
                                 if attr not in raw_post.keys(): #handling missing values
                                     post[attr] = None
@@ -105,19 +119,26 @@ class RedditHandler:
                     posts = self._post_request_API(current_date_post, self.end_date, sub) 
                     pretty_current_date_post = datetime.datetime.utcfromtimestamp(current_date_post).strftime('%Y-%m-%d')
                     print(f'Extracted posts until date: {pretty_current_date_post}')
+                # Extracting comments
                 while len(comments) > 0:
                     for raw_comment in comments: 
                         if raw_comment['author'] not in ['[deleted]', 'AutoModerator']:
-                            #print('DATAOK:',datetime.datetime.utcfromtimestamp(raw_comment['created_utc']).strftime('%Y-%m-%d'))
                             user_id = raw_comment['author']
                             if user_id not in users.keys():
                                 users[user_id] = {'posts':[], 'comments':[]} 
-                            # selecting attributes
-                            comment = dict()
+                            comment = dict() # dict to store a comment
+                            # adding field category
                             comment['category'] = category
-                            comment['date'] = datetime.datetime.utcfromtimestamp(raw_comment['created_utc']).strftime('%Y-%m-%d')
-                                # TODO: comment['time_period'] = period
-                                # TODO: mettici range temporale post['time_period']=boh
+                            # adding field date in a readable format
+                            comment['date'] = datetime.datetime.utcfromtimestamp(raw_comment['created_utc']).strftime("%d/%m/%Y")
+                            # adding time_period fieldin a readable format
+                            if datetime.datetime.strptime(comment['date'], "%d/%m/%Y") >= period_comment[1]:
+                                period_comment = (period_comment[1], period_comment[1] + relativedelta(months=+n_months))
+                            if self.n_months != 0: 
+                                comment['time_period'] = (period_comment[0].strftime('%m/%d/%Y'), period_comment[1].strftime('%m/%d/%Y')) 
+                            else:
+                                comment['time_period'] = (datetime.datetime.utcfromtimestamp(self.start_date).strftime("%d/%m/%Y"),datetime.datetime.utcfromtimestamp(self.end_date).strftime("%d/%m/%Y"))
+                            # selecting fields
                             for attr in self.comment_attributes: 
                                 if attr not in raw_comment.keys(): #handling missing values
                                     comment[attr] = None
@@ -157,14 +178,12 @@ if __name__ == '__main__':
     out_folder = os.path.join(cwd, 'reddit_analysis')
     out_folder = 'reddit_analysis'
     category = {'gun':['guncontrol'], 'politics':['EnoughTrumpSpam','Fuckthealtright']}
-    start_date = '23/10/2020'
-    end_date = '27/10/2020'
-    n_months = 3
+    start_date = '23/10/2019'
+    end_date = '27/01/2020'
+    n_months = 1
     #default post attributes
     post_attributes = ['id','author', 'created_utc', 'num_comments', 'over_18', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title']
     #default comment attributes
     comment_attributes = ['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score']
     my_handler = RedditHandler(out_folder, category, start_date, end_date, n_months=n_months, post_attributes=post_attributes, comment_attributes=comment_attributes)
     my_handler.extract_data()
-
-    
