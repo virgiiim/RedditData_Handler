@@ -5,12 +5,15 @@ import requests
 import json
 import pickle
 import os
+#for text cleaning
+import string
+import re
 
 class RedditHandler:
     ''' 
     class responsible for extracting and processing reddit data and the creation of users' network
     '''
-    def __init__(self, out_folder, categories, start_date, end_date, n_months=1, post_attributes=['author', 'created_utc', 'id', 'num_comments', 'over_18', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title'], comment_attributes=['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score']):
+    def __init__(self, out_folder, categories, start_date, end_date, n_months=1, post_attributes=['id','author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title'], comment_attributes=['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score']):
         '''
         Parameters
         ----------
@@ -25,7 +28,7 @@ class RedditHandler:
         n_months: int
             integer inicating the time period considered 
         post_attributes : list, optional
-            post's attributes to be selected. The default is ['author', 'created_utc', 'id', 'num_comments', 'over_18', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title'].
+            post's attributes to be selected. The default is ['id','author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title']
         comment_attributes: list, optional
             comment's attributes to be selected. The default is ['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score']
         '''
@@ -57,13 +60,38 @@ class RedditHandler:
 
     def _comment_request_API(self, start_date, end_date, subreddit):
         '''
-        API REQUEST to pushishift.io/reddit/submission
-        returns a list of 1000 dictionaries where each of them is a post 
+        API REQUEST to pushishift.io/reddit/comment
+        returns a list of 1000 dictionaries where each of them is a comment
         '''
         url = 'https://api.pushshift.io/reddit/search/comment?&size=500&after='+str(start_date)+'&before='+str(end_date)+'&subreddit='+str(subreddit)
         r = requests.get(url) # Response Object
         data = json.loads(r.text) # r.text is a JSON object, converted into dict
-        return data['data'] # data['data'] contains list of posts  
+        return data['data'] # data['data'] contains list of comments
+    
+    def _clean_raw_text(self, text):
+
+        # Lowercasing text
+        text = text.lower()
+        # Removing not printable characters 
+        text = ''.join(filter(lambda x:x in string.printable, text))
+        # Removing XSLT tags
+        text = re.sub(r'&lt;/?[a-z]+&gt;', '', text)
+        text = text.replace(r'&amp;', 'and')
+        # Removing newline, tabs and special reddit words
+        text = text.replace('\n',' ')
+        text = text.replace('\t',' ')
+        text = text.replace('[deleted]','').replace('[removed]','')
+        # Removing URLs
+        text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
+        # Removing numbers
+        text = re.sub(r'\w*\d+\w*', '', text)
+        # Removing Punctuation
+        text = text.translate(str.maketrans('', '', string.punctuation))
+        # Removing extra spaces
+        text = re.sub(r'\s{2,}', " ", text)
+        # Stop words? Emoji?
+        return text
+
     
     def extract_data(self):
         '''
@@ -82,7 +110,7 @@ class RedditHandler:
                 current_date_post = self.start_date
                 current_date_comment = self.start_date
                 # handling time-period
-                end_period = datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y") + relativedelta(months=+n_months)
+                end_period = datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y") + relativedelta(months=+self.n_months)
                 period_post = (datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y"), end_period)
                 period_comment = (datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y"), end_period)
                 # first call to API
@@ -101,9 +129,12 @@ class RedditHandler:
                             post['category'] = category
                             # adding field date in a readable format
                             post['date'] = datetime.datetime.utcfromtimestamp(raw_post['created_utc']).strftime("%d/%m/%Y")
+                            # cleaning body field
+                            merged_text = raw_post['title']+' '+raw_post['selftext']
+                            post['clean_text'] = self._clean_raw_text(merged_text)
                             # adding field time_period in a readable format
                             if datetime.datetime.strptime(post['date'], "%d/%m/%Y") >= period_post[1]:
-                                period_post = (period_post[1], period_post[1] + relativedelta(months=+n_months))
+                                period_post = (period_post[1], period_post[1] + relativedelta(months=+self.n_months))
                             if self.n_months != 0: 
                                 post['time_period'] = (period_post[0].strftime('%m/%d/%Y'), period_post[1].strftime('%m/%d/%Y')) 
                             else:
@@ -131,9 +162,11 @@ class RedditHandler:
                             comment['category'] = category
                             # adding field date in a readable format
                             comment['date'] = datetime.datetime.utcfromtimestamp(raw_comment['created_utc']).strftime("%d/%m/%Y")
+                            # cleaning body field
+                            comment['clean_text'] = self._clean_raw_text(raw_comment['body'])
                             # adding time_period fieldin a readable format
                             if datetime.datetime.strptime(comment['date'], "%d/%m/%Y") >= period_comment[1]:
-                                period_comment = (period_comment[1], period_comment[1] + relativedelta(months=+n_months))
+                                period_comment = (period_comment[1], period_comment[1] + relativedelta(months=+self.n_months))
                             if self.n_months != 0: 
                                 comment['time_period'] = (period_comment[0].strftime('%m/%d/%Y'), period_comment[1].strftime('%m/%d/%Y')) 
                             else:
@@ -163,10 +196,6 @@ class RedditHandler:
             print('Done to extract data from category:', categories_keys[i])
             i+=1 #to iter over elements
     
-    def clean_data(self):
-        '''
-        clean Reddit textual data with standard text preprocessing pipeline
-        ''' 
 
     def create_network(self):
         '''
@@ -182,7 +211,7 @@ if __name__ == '__main__':
     end_date = '27/01/2020'
     n_months = 1
     #default post attributes
-    post_attributes = ['id','author', 'created_utc', 'num_comments', 'over_18', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title']
+    post_attributes = ['id','author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title']
     #default comment attributes
     comment_attributes = ['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score']
     my_handler = RedditHandler(out_folder, category, start_date, end_date, n_months=n_months, post_attributes=post_attributes, comment_attributes=comment_attributes)
