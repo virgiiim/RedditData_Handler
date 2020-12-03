@@ -3,6 +3,7 @@ from dateutil.relativedelta import relativedelta
 import time
 import requests
 import json
+import random
 import os
 import pandas as pd
 #for text cleaning
@@ -49,25 +50,34 @@ class RedditHandler:
         self.post_attributes = post_attributes 
         self.comment_attributes = comment_attributes 
    
-    def _post_request_API(self, start_date, end_date, subreddit):
+    def _post_request_API(self, start_date, end_date, subreddit, try_number=1):
         '''
         API REQUEST to pushishift.io/reddit/submission
         returns a list of 1000 dictionaries where each of them is a post 
         '''
         url = 'https://api.pushshift.io/reddit/search/submission?&size=500&after='+str(start_date)+'&before='+str(end_date)+'&subreddit='+str(subreddit)
-        r = requests.get(url) # Response Object
-        data = json.loads(r.text) # r.text is a JSON object, converted into dict
-        return data['data'] # data['data'] contains list of posts  
+        try:
+            r = requests.get(url) # Response Object
+            data = json.loads(r.text) # r.text is a JSON object, converted into dict
+        except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError):
+            time.sleep(2**try_number + random.random()*0.01) #exponential backoff
+            return self._post_request_API(start_date, end_date, subreddit, try_number=try_number+1)
+        return data['data'] # data['data'] contains list of posts   
 
-    def _comment_request_API(self, start_date, end_date, subreddit):
+
+    def _comment_request_API(self, start_date, end_date, subreddit, try_number=1):
         '''
         API REQUEST to pushishift.io/reddit/comment
         returns a list of 1000 dictionaries where each of them is a comment
         '''
         url = 'https://api.pushshift.io/reddit/search/comment?&size=500&after='+str(start_date)+'&before='+str(end_date)+'&subreddit='+str(subreddit)
-        r = requests.get(url) # Response Object
-        data = json.loads(r.text) # r.text is a JSON object, converted into dict
-        return data['data'] # data['data'] contains list of comments
+        try:
+            r = requests.get(url) # Response Object
+            data = json.loads(r.text) # r.text is a JSON object, converted into dict
+        except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError):
+            time.sleep(2**try_number + random.random()*0.01) #exponential backoff
+            return self._comment_request_API(start_date, end_date, subreddit, try_number=try_number+1)
+        return data['data'] # data['data'] contains list of comments  
     
     def _clean_raw_text(self, text):
         '''
@@ -80,6 +90,7 @@ class RedditHandler:
         # Removing XSLT tags
         text = re.sub(r'&lt;/?[a-z]+&gt;', '', text)
         text = text.replace(r'&amp;', 'and')
+        text = text.replace(r'&gt;', '') # TODO: try another way to strip xslt tags
         # Removing newline, tabs and special reddit words
         text = text.replace('\n',' ')
         text = text.replace('\t',' ')
@@ -117,8 +128,8 @@ class RedditHandler:
                 period_post = (datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y"), end_period)
                 period_comment = (datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y"), end_period)
                 # first call to API
-                posts = self._post_request_API(current_date_post, self.end_date, sub) 
-                comments = self._comment_request_API(current_date_post, self.end_date, sub) 
+                posts = self._post_request_API(current_date_post, self.end_date, sub, try_number=1) 
+                comments = self._comment_request_API(current_date_post, self.end_date, sub, try_number=1) 
                 # extracting posts
                 while len(posts) > 0: #collecting data until reaching the end_date
                     # TODO: check if sub exists!
@@ -146,11 +157,11 @@ class RedditHandler:
                             for attr in self.post_attributes: 
                                 if attr not in raw_post.keys(): #handling missing values
                                     post[attr] = None
-                                else:
+                                elif (attr != 'selftext') and (attr != 'title'): # saving only clean text
                                     post[attr] = raw_post[attr]
                             users[user_id]['posts'].append(post)
                     current_date_post = posts[-1]['created_utc'] # taking the UNIX timestamp date of the last record extracted
-                    posts = self._post_request_API(current_date_post, self.end_date, sub) 
+                    posts = self._post_request_API(current_date_post, self.end_date, sub, try_number=1) 
                     pretty_current_date_post = datetime.datetime.utcfromtimestamp(current_date_post).strftime('%Y-%m-%d')
                     print(f'Extracted posts until date: {pretty_current_date_post}')
                 # Extracting comments
@@ -178,11 +189,11 @@ class RedditHandler:
                             for attr in self.comment_attributes: 
                                 if attr not in raw_comment.keys(): #handling missing values
                                     comment[attr] = None
-                                else:
+                                elif attr != 'body': # saving only clean text
                                     comment[attr] = raw_comment[attr]
                             users[user_id]['comments'].append(comment)
                     current_date_comment = comments[-1]['created_utc'] # taking the UNIX timestamp date of the last record extracted
-                    comments = self._comment_request_API(current_date_comment, self.end_date, sub) 
+                    comments = self._comment_request_API(current_date_comment, self.end_date, sub, try_number=1) 
                     pretty_current_date_comment = datetime.datetime.utcfromtimestamp(current_date_comment).strftime('%Y-%m-%d')
                     print(f'Extracted comments until date: {pretty_current_date_comment}')
                 print(f'Finished data extraction for subreddit {sub}')
@@ -226,7 +237,7 @@ class RedditHandler:
             users_list = os.listdir(path_category) # for each category a list of all file in that category (i mean of each user)
             period = (datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y"), datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y") + relativedelta(months=+self.n_months))
             users = dict() #dict to store users posts_ids and comment in a period
-            while period[0] <= datetime.datetime.strptime(self.real_end_date, "%d/%m/%Y"):
+            while period[1] <= datetime.datetime.strptime(self.real_end_date, "%d/%m/%Y"):
                 print('PERIODO:', period[0],period[1])
                 parent_cnt = 0
                 for user in users_list: 
@@ -234,7 +245,7 @@ class RedditHandler:
                     submission_ids = list()
                     comment_ids = list()
                     parent_ids = list()
-                    with open(user_filename, 'r') as f: # TODO: prendi solo post e commenti di quel periodo altrimenti non inserire l'utente
+                    with open(user_filename, 'r') as f:
                         user_data = json.load(f)
                         for comment in user_data['comments']:
                             if (datetime.datetime.strptime(comment['time_period'][0], "%d/%m/%Y") >= period[0]) and (datetime.datetime.strptime(comment['time_period'][1], "%d/%m/%Y") <= period[1]): 
@@ -293,9 +304,9 @@ if __name__ == '__main__':
     cwd = os.getcwd()
     out_folder = os.path.join(cwd, 'reddit_analysis')
     out_folder = 'reddit_analysis'
-    category = {'gun':['guncontrol'], 'politics':['The_Donald','Fuckthealtright']}
-    start_date = '23/10/2019'
-    end_date = '27/01/2020'
+    category = {'gun':['guncontrol'], 'politics':['EnoughTrumpSpam','Fuckthealtright']}
+    start_date = '10/10/2019'
+    end_date = '10/01/2020'
     n_months = 1
     #default post attributes
     post_attributes = ['id','author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title']
