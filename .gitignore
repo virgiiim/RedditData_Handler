@@ -9,7 +9,7 @@
 .history/
 
 # Reddit data extracted
-reddit_analysis/
+RedditHandler_Outputs/
 
 # Common credential files
 **/credentials.json
