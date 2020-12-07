@@ -18,7 +18,7 @@ post_attributes = ['id','author', 'created_utc', 'num_comments', 'over_18', 'is_
 # default comment attributes
 comment_attributes = ['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score']
 my_handler = reddit_handler.RedditHandler(out_folder, extract_post, extract_comment, category, start_date, end_date, n_months=n_months, post_attributes=post_attributes, comment_attributes=comment_attributes)
-#my_handler.extract_data()
+my_handler.extract_data()
 my_handler.create_network()
 
 
