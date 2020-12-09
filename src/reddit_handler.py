@@ -294,7 +294,7 @@ class RedditHandler:
         '''
         crate users' interaction network based on comments:
         type of network: directed and weighted by number of interactions 
-        self loop are allowed
+        self loops are not allowed
         '''
         if not self.extract_comment or not self.extract_post: # if user wants to create users interactions networks it is necessary to extract both posts and comments in extract_data()
             raise ValueError('To create users interactions Networks you have to set self.extract_comment to True')
@@ -309,8 +309,9 @@ class RedditHandler:
         for category in categories: 
             category_name = ''.join([i for i in category if i.isalpha()]).replace('zip','')
             if (category_name in list(self.categories.keys())) and (self.pretty_start_date in category) and (self.pretty_end_date in category):
-                file_name = f'{path}\\{category}'
-                unzipped_filename = file_name.replace(f'{path}','').replace('\\','').replace('.zip','')
+                file_name = os.path.abspath(os.path.join(path,category))
+                #unzipped_filename = file_name.replace(f'{path}','').replace('\\','').replace('.zip','')
+                unzipped_filename = os.path.basename(file_name).replace('.zip','')
                 extract_dir = file_name.replace('.zip','')
                 shutil.unpack_archive(file_name, extract_dir, 'zip') 
                 unzipped_categories.append(unzipped_filename)
@@ -388,8 +389,8 @@ if __name__ == '__main__':
     extract_post = True
     extract_comment = True
     category = {'gun':['guncontrol'], 'politics':['EnoughTrumpSpam','Fuckthealtright']}
-    start_date = '04/12/2018'
-    end_date = '04/02/2019'
+    start_date = '08/12/2018'
+    end_date = '08/01/2019'
     n_months = 1
     #default post attributes
     post_attributes = ['id','author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title']
@@ -398,3 +399,4 @@ if __name__ == '__main__':
     my_handler = RedditHandler(out_folder, extract_post, extract_comment, category, start_date, end_date, n_months=n_months, post_attributes=post_attributes, comment_attributes=comment_attributes)
     my_handler.extract_data()
     my_handler.create_network()
+
