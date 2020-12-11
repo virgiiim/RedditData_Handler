@@ -24,6 +24,28 @@ def remove_stopWords(s):
 class PolarizationClassifier():
 
     def __init__(self, out_folder, extract_post, extract_comment, category, start_date, end_date, file_model, file_weights, file_tokenizer):
+        '''
+        Parameters
+        ----------
+        out_folder : str
+            path of the output folder
+        extract_post: bool
+            True if you want to extract Post data, False otherwise
+        extract_comment : bool
+            True if you want to extract Comment data, False otherwise
+        categories : dict
+            dict with category name as key and list of subreddits in that category as value
+        start_date : str
+            beginning date in format %d/%m/%Y
+        end_date : str
+            end date in format %d/%m/%Y
+        file_model: .json
+            Glove Word Embeddings + LSTM Model
+        file_weights: .h5
+            Model's weights
+        file_tokenizer: .pickle
+            Model's tokenizer
+        '''
        
         self.out_folder = out_folder
         if not os.path.exists(self.out_folder):
