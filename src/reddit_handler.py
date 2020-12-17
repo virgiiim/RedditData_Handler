@@ -185,11 +185,6 @@ class RedditHandler:
                             # collecting posts
                             if raw_post['author'] not in ['[deleted]', 'AutoModerator']: # discarding data concerning removed users and moderators
                                 user_id = raw_post['author']
-                                if user_id not in users.keys():
-                                    if self.extract_post and self.extract_comment:
-                                        users[user_id] = {'posts':[], 'comments':[]}
-                                    else:
-                                        users[user_id] = {'posts':[]}
                                 post = dict() #dict to store posts
                                 # adding field category
                                 post['category'] = category
@@ -209,7 +204,13 @@ class RedditHandler:
                                         post[attr] = None
                                     elif (attr != 'selftext') and (attr != 'title'): # saving only clean text
                                         post[attr] = raw_post[attr]
-                                users[user_id]['posts'].append(post)
+                                if len(post['clean_text']) > 1:  # avoiding empty posts
+                                    if user_id not in users.keys():
+                                        if self.extract_post and self.extract_comment:
+                                            users[user_id] = {'posts':[], 'comments':[]}
+                                        else:
+                                            users[user_id] = {'posts':[]}
+                                    users[user_id]['posts'].append(post)
                         current_date_post = posts[-1]['created_utc'] # taking the UNIX timestamp date of the last record extracted
                         posts = self._post_request_API(current_date_post, self.end_date, sub) 
                         pretty_current_date_post = datetime.datetime.utcfromtimestamp(current_date_post).strftime('%Y-%m-%d')
@@ -256,11 +257,6 @@ class RedditHandler:
                             # collecting comments
                             if raw_comment['author'] not in ['[deleted]', 'AutoModerator']:
                                 user_id = raw_comment['author']
-                                if user_id not in users.keys():
-                                    if self.extract_post and self.extract_comment:
-                                        users[user_id] = {'posts':[], 'comments':[]} 
-                                    else:
-                                        users[user_id] = {'comments':[]} 
                                 comment = dict() # dict to store a comment
                                 # adding field category
                                 comment['category'] = category
@@ -279,7 +275,13 @@ class RedditHandler:
                                         comment[attr] = None
                                     elif attr != 'body': # saving only clean text
                                         comment[attr] = raw_comment[attr]
-                                users[user_id]['comments'].append(comment)
+                                if len(comment['clean_text']) > 1: # avoiding empty comments
+                                    if user_id not in users.keys():
+                                        if self.extract_post and self.extract_comment:
+                                            users[user_id] = {'posts':[], 'comments':[]} 
+                                        else:
+                                            users[user_id] = {'comments':[]} 
+                                    users[user_id]['comments'].append(comment)
                         current_date_comment = comments[-1]['created_utc'] # taking the UNIX timestamp date of the last record extracted
                         comments = self._comment_request_API(current_date_comment, self.end_date, sub) 
                         pretty_current_date_comment = datetime.datetime.utcfromtimestamp(current_date_comment).strftime('%Y-%m-%d')

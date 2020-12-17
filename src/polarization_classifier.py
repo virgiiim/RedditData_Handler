@@ -159,6 +159,7 @@ class PolarizationClassifier():
         # padding sequences
         padded_docs_test = pad_sequences(encoded_docs_test,maxlen=350, padding='post')
         return self.model.predict_proba(padded_docs_test)
+
     
     def _predict_class(self, submissions):
         '''
@@ -175,7 +176,7 @@ if __name__ == '__main__':
     extract_comment = True
     category = {'gun':['guncontrol'], 'politics':['EnoughTrumpSpam','Fuckthealtright']}
     start_date = '13/12/2018'
-    end_date = '13/03/2019'
+    end_date = '13/02/2019'
     file_model = 'Model/model_glove.json'
     file_weights = 'Model/model_glove.h5'
     file_tokenizer = 'Model/tokenizer_def.pickle'
