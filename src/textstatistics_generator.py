@@ -3,8 +3,10 @@ import json
 import pandas as pd
 import shutil
 import zipfile
-from nltk.tokenize import word_tokenize
 import nltk
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
+from nltk.corpus import wordnet 
 import statistics
 import operator
 import time
@@ -13,6 +15,8 @@ from lexicalrichness import LexicalRichness
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from textblob import TextBlob
 from nrclex import NRCLex
+from nltk.corpus import stopwords
+
 
 class TextStatisticGenerator():
 
@@ -44,8 +48,9 @@ class TextStatisticGenerator():
         self.pretty_start_date = start_date.replace('/','-')
         self.pretty_end_date = end_date.replace('/','-')  
 
-    def _Lancaster_Sensorimotor_lexicon(self, tokenized_text, LNA_lexicon, LNP_lexicon, LNA, LNP):
-
+    def _Lancaster_Sensorimotor_lexicon(self, tokenized_text, LNA_lexicon, LNP_lexicon):
+        LNP = {'Visual':0, 'Olfactory':0, 'Haptic':0, 'Auditory':0, 'Interoceptive':0, 'Gustatory':0}
+        LNA = {'Hand_arm':0, 'Mouth':0, 'Head':0, 'Torso':0, 'Foot_leg':0}
         for word in tokenized_text:
             if word in list(LNP_lexicon.keys()):
                 LNP[LNP_lexicon[word]]+=1
@@ -53,17 +58,19 @@ class TextStatisticGenerator():
                 LNA[LNA_lexicon[word]]+=1
         return LNA, LNP
 
-    
-    def _taboo_lexicon(self, tokenized_text, taboo_lexicon, taboo_rate): # range: [1-9]
+    def _taboo_lexicon(self, tokenized_text, taboo_lexicon): # range: [1-9]
         taboo = list()
         for word in tokenized_text:
             if word in list(taboo_lexicon.keys()):
                 taboo.append(taboo_lexicon[word])
         if taboo:
-            taboo_rate.append(round(statistics.mean(taboo),2))
+            taboo_rate = round(statistics.mean(taboo),2)
+        else:
+            taboo_rate = 0
         return taboo_rate
 
-    def _VAD_lexicon(self, tokenized_text, VAD_Lexicon_Arousal, VAD_Lexicon_Dominance, VAD_Lexicon_Valence, VAD_dominance, VAD_arousal, VAD_valence):
+    def _VAD_lexicon(self, tokenized_text, VAD_Lexicon_Arousal, VAD_Lexicon_Dominance, VAD_Lexicon_Valence):
+        VAD = dict()
         arousal, dominance, valence = ([] for i in range(3))
         for word in tokenized_text:
             if word in list(VAD_Lexicon_Arousal.keys()):
@@ -72,43 +79,26 @@ class TextStatisticGenerator():
                 dominance.append(VAD_Lexicon_Dominance[word])
             if word in list(VAD_Lexicon_Valence.keys()):
                 valence.append(VAD_Lexicon_Valence[word])
-
         if arousal:
-            VAD_arousal.append(round(statistics.mean(arousal),2))
+            VAD['arousal'] = round(statistics.mean(arousal),2)
+        else:
+            VAD['arousal'] = 0
         if dominance:
-            VAD_dominance.append(round(statistics.mean(dominance),2))
+            VAD['dominance'] = round(statistics.mean(dominance),2)
+        else:
+            VAD['dominance'] = 0
         if valence:
-            VAD_valence.append(round(statistics.mean(valence),2))
+            VAD['valence'] = round(statistics.mean(valence),2)
+        else:
+            VAD['valence'] = 0
         
-        return VAD_dominance, VAD_arousal, VAD_valence
+        return VAD
 
-    def _NRCL_affect_lexicon(self, text, NRCL_positive, NRCL_negative, NRCL_anticipation, NRCL_surprise, NRCL_trust, NRCL_joy, NRCL_fear, NRCL_anger, NRCL_sadness, NRCL_disgust):
+    def _NRCL_affect_lexicon(self, text):
         # NRCLex
         text_object = NRCLex(text)
-        if text_object.affect_frequencies['anticip'] != 0.0:
-            NRCL_anticipation.append(text_object.affect_frequencies['anticip'])
-        if text_object.affect_frequencies['positive'] != 0.0:
-            NRCL_positive.append(text_object.affect_frequencies['positive'])
-        if text_object.affect_frequencies['surprise'] != 0.0:
-            NRCL_surprise.append(text_object.affect_frequencies['surprise'])
-        if text_object.affect_frequencies['trust'] != 0.0:
-            NRCL_trust.append(text_object.affect_frequencies['trust'])
-        if text_object.affect_frequencies['joy'] != 0.0:
-            NRCL_joy.append(text_object.affect_frequencies['joy'])
-        if text_object.affect_frequencies['fear'] != 0.0:
-            NRCL_fear.append(text_object.affect_frequencies['fear'])
-        if text_object.affect_frequencies['anger'] != 0.0:
-            NRCL_anger.append(text_object.affect_frequencies['anger'])
-        if text_object.affect_frequencies['negative'] != 0.0:
-            NRCL_negative.append(text_object.affect_frequencies['negative'])
-        if text_object.affect_frequencies['sadness'] != 0.0:
-            NRCL_sadness.append(text_object.affect_frequencies['sadness'])
-        if text_object.affect_frequencies['disgust'] != 0.0:
-            NRCL_disgust.append(text_object.affect_frequencies['disgust'])
 
-        return  NRCL_positive, NRCL_negative, NRCL_anticipation, NRCL_surprise, NRCL_trust, NRCL_joy, NRCL_fear, NRCL_anger, NRCL_sadness, NRCL_disgust
-
-
+        return  text_object.affect_frequencies
 
     def _sentiment_analysis(self ,text, vader_positive, vader_negative, vader_neutral, vader_compound, textblob_polarity, textblob_subjectivity):
         # VADER
@@ -126,17 +116,29 @@ class TextStatisticGenerator():
         
         return vader_positive, vader_negative, vader_neutral, vader_compound, textblob_polarity, textblob_subjectivity
     
-    def _compute_lexicalRichness(self, text, word_count, unique_words_cnt, lexical_diversity):
+    def _compute_lexicalRichness(self, text, lemmatized_test, word_count, unique_words_cnt, lexical_diversity):
         lex = LexicalRichness(text)
+        lex_lemmatized = LexicalRichness(lemmatized_test)
         # word count
         word_count.append(lex.words)
         # unique term count
         unique_words_cnt.append(lex.terms)
         # measure of Textual Lexical Diversity 
-        lexical_diversity.append(float(lex.terms)/float(lex.words))
+        lexical_diversity.append(float(lex_lemmatized.terms)/float(lex_lemmatized.words))
         
         return word_count, unique_words_cnt, lexical_diversity  
-   
+
+    def _pos_tagger(self, nltk_tag): 
+        if nltk_tag.startswith('J'): 
+            return wordnet.ADJ 
+        elif nltk_tag.startswith('V'): 
+            return wordnet.VERB 
+        elif nltk_tag.startswith('N'): 
+            return wordnet.NOUN 
+        elif nltk_tag.startswith('R'): 
+            return wordnet.ADV 
+        else:           
+            return None
 
     def extract_statistics(self):
         '''
@@ -157,6 +159,8 @@ class TextStatisticGenerator():
             LNA_lexicon = json.loads(fp.read())
         with open('psycholing_features_rates/Lancaster_Norms_Perceptual.json') as fp:
             LNP_lexicon = json.loads(fp.read())
+        # Initiating Lemmatizer
+        lemmatizer = WordNetLemmatizer()
         # creating folder with avg polaization score for each user
         user_textstats_folder = os.path.join(self.out_folder, 'Text_Statistics')
         if not os.path.exists(user_textstats_folder):
@@ -194,112 +198,92 @@ class TextStatisticGenerator():
                 # collecting user texts 
                 for user in users_list: 
                     user_filename = os.path.join(path_period, user)
+                    # all user texts
+                    all_tokenized_texts = list()
+                    all_filtered_words = list()
+                    all_filtered_texts = ''
                     # lexical richness measures
                     word_count, unique_words_cnt, lexical_diversity = ([] for i in range(3))                  
                     # Vader sentiment analysis
                     vader_positive, vader_negative, vader_neutral, vader_compound = ([] for i in range(4))
                     # TextBlob sentiment analysis: polarity & subjectivity
                     textblob_polarity, textblob_subjectivity = ([] for i in range(2))
-                    # NRCLex to measure emotional affects
-                    NRCL_positive, NRCL_negative, NRCL_anticipation, NRCL_surprise, NRCL_trust, NRCL_joy, NRCL_fear, NRCL_anger, NRCL_sadness, NRCL_disgust = ([] for i in range(10))
-                    # VAD lexicon to measure dominance, arousal, valence
-                    VAD_dominance, VAD_arousal, VAD_valence = ([] for i in range(3))
-                    # Taboo Dataset to measure taboo rate
-                    taboo_rate = list()
-                    # Lancaster Sensorimotor Lexicon
-                    LNP = {'Visual':0, 'Olfactory':0, 'Haptic':0, 'Auditory':0, 'Interoceptive':0, 'Gustatory':0}
-                    LNA = {'Hand_arm':0, 'Mouth':0, 'Head':0, 'Torso':0, 'Foot_leg':0}
                     with open(user_filename, 'r') as f:
                         user_data = json.load(f)
                         if self.extract_comment:
                             for comment in user_data['comments']:
                                 if len(comment['clean_text']) > 0:
-                                    tokenized_text = word_tokenize(comment['clean_text'])
-                                    word_count, unique_words_cnt, lexical_diversity = self._compute_lexicalRichness(comment['clean_text'], word_count, unique_words_cnt, lexical_diversity)
-                                    vader_positive, vader_negative, vader_neutral, vader_compound, textblob_polarity, textblob_subjectivity = self._sentiment_analysis(comment['clean_text'], vader_positive, vader_negative, vader_neutral, vader_compound, textblob_polarity, textblob_subjectivity)
-                                    NRCL_positive, NRCL_negative, NRCL_anticipation, NRCL_surprise, NRCL_trust, NRCL_joy, NRCL_fear, NRCL_anger, NRCL_sadness, NRCL_disgust = self._NRCL_affect_lexicon(comment['clean_text'], NRCL_positive, NRCL_negative, NRCL_anticipation, NRCL_surprise, NRCL_trust, NRCL_joy, NRCL_fear, NRCL_anger, NRCL_sadness, NRCL_disgust)
-                                    VAD_dominance, VAD_arousal, VAD_valence = self._VAD_lexicon(tokenized_text, VAD_Lexicon_Arousal, VAD_Lexicon_Dominance, VAD_Lexicon_Valence, VAD_dominance, VAD_arousal, VAD_valence )
-                                    taboo_rate = self._taboo_lexicon(tokenized_text, taboo_lexicon, taboo_rate)
-                                    LNA, LNP = self._Lancaster_Sensorimotor_lexicon(tokenized_text, LNA_lexicon, LNP_lexicon, LNA, LNP)
+                                    correct_text = comment['clean_text']
+                                    # tokenize text
+                                    tokenized_text = word_tokenize(correct_text)
+                                    all_tokenized_texts.extend(tokenized_text)
+                                    # find the POS tag for each token 
+                                    pos_tagged = nltk.pos_tag(tokenized_text)
+                                    wordnet_tagged = list(map(lambda x: (x[0], self._pos_tagger(x[1])), pos_tagged)) 
+                                    # lemmatize text
+                                    lemmatized_text = list()
+                                    for word, tag in wordnet_tagged: 
+                                        if tag is None: 
+                                            # if there is no available tag, append the token as is 
+                                            lemmatized_text.append(word) 
+                                        else:         
+                                            # else use the tag to lemmatize the token 
+                                            lemmatized_text.append(lemmatizer.lemmatize(word, tag)) 
+                                    lemmatized_text = " ".join(lemmatized_text) 
+                                    # removing stopwords
+                                    filtered_words = [word for word in tokenized_text if word not in stopwords.words('english')]
+                                    all_filtered_words.extend(filtered_words)
+                                    filtered_text =' '.join(word for word in filtered_words)
+                                    all_filtered_texts += ' ' + filtered_text
+                                    word_count, unique_words_cnt, lexical_diversity = self._compute_lexicalRichness(correct_text, lemmatized_text, word_count, unique_words_cnt, lexical_diversity)
+                                    vader_positive, vader_negative, vader_neutral, vader_compound, textblob_polarity, textblob_subjectivity = self._sentiment_analysis(correct_text, vader_positive, vader_negative, vader_neutral, vader_compound, textblob_polarity, textblob_subjectivity)
+                                    
                         if self.extract_post:
                             for post in user_data['posts']:
                                 if len(post['clean_text']) > 0:
-                                    tokenized_text = word_tokenize(post['clean_text'])
-                                    word_count, unique_words_cnt, lexical_diversity = self._compute_lexicalRichness(post['clean_text'], word_count, unique_words_cnt, lexical_diversity)
-                                    vader_positive, vader_negative, vader_neutral, vader_compound, textblob_polarity, textblob_subjectivity = self._sentiment_analysis(post['clean_text'], vader_positive, vader_negative, vader_neutral, vader_compound, textblob_polarity, textblob_subjectivity)
-                                    NRCL_positive, NRCL_negative, NRCL_anticipation, NRCL_surprise, NRCL_trust, NRCL_joy, NRCL_fear, NRCL_anger, NRCL_sadness, NRCL_disgust = self._NRCL_affect_lexicon(post['clean_text'], NRCL_positive, NRCL_negative, NRCL_anticipation, NRCL_surprise, NRCL_trust, NRCL_joy, NRCL_fear, NRCL_anger, NRCL_sadness, NRCL_disgust)
-                                    VAD_dominance, VAD_arousal, VAD_valence = self._VAD_lexicon(tokenized_text, VAD_Lexicon_Arousal, VAD_Lexicon_Dominance, VAD_Lexicon_Valence, VAD_dominance, VAD_arousal, VAD_valence )
-                                    taboo_rate = self._taboo_lexicon(tokenized_text, taboo_lexicon, taboo_rate)
-                                    LNA, LNP = self._Lancaster_Sensorimotor_lexicon(tokenized_text, LNA_lexicon, LNP_lexicon, LNA, LNP)
+                                    correct_text = post['clean_text']
+                                    # tokenize test
+                                    tokenized_text = word_tokenize(correct_text)
+                                    all_tokenized_texts.extend(tokenized_text)
+                                    # find the POS tag for each token 
+                                    pos_tagged = nltk.pos_tag(tokenized_text)
+                                    wordnet_tagged = list(map(lambda x: (x[0], self._pos_tagger(x[1])), pos_tagged)) 
+                                    # lemmatize text
+                                    lemmatized_text = list()
+                                    for word, tag in wordnet_tagged: 
+                                        if tag is None: 
+                                            # if there is no available tag, append the token as is 
+                                            lemmatized_text.append(word) 
+                                        else:         
+                                            # else use the tag to lemmatize the token 
+                                            lemmatized_text.append(lemmatizer.lemmatize(word, tag)) 
+                                    lemmatized_text = " ".join(lemmatized_text) 
+                                    filtered_words = [word for word in tokenized_text if word not in stopwords.words('english')]
+                                    all_filtered_words.extend(filtered_words)
+                                    filtered_text =' '.join(word for word in filtered_words)
+                                    all_filtered_texts += ' ' + filtered_text
+                                    word_count, unique_words_cnt, lexical_diversity = self._compute_lexicalRichness(correct_text, lemmatized_text, word_count, unique_words_cnt, lexical_diversity)
+                                    vader_positive, vader_negative, vader_neutral, vader_compound, textblob_polarity, textblob_subjectivity = self._sentiment_analysis(correct_text, vader_positive, vader_negative, vader_neutral, vader_compound, textblob_polarity, textblob_subjectivity)
+                                    
                     pretty_username = user.replace('.json','')
-                    try:
-                        avg_NRCL_positive = round(statistics.mean(NRCL_positive),2)
-                    except:
-                        avg_NRCL_positive = 0
-                    try:
-                        avg_NRCL_negative = round(statistics.mean(NRCL_negative),2)
-                    except:
-                        avg_NRCL_negative = 0
-                    try:
-                        avg_NRCL_anticipation = round(statistics.mean(NRCL_anticipation),2)
-                    except:
-                        avg_NRCL_anticipation = 0
-                    try:
-                        avg_NRCL_surprise = round(statistics.mean(NRCL_surprise),2)
-                    except:
-                        avg_NRCL_surprise = 0
-                    try:
-                        avg_NRCL_trust = round(statistics.mean(NRCL_trust),2)
-                    except:
-                        avg_NRCL_trust = 0
-                    try:
-                        avg_NRCL_joy = round(statistics.mean(NRCL_joy),2)
-                    except:
-                        avg_NRCL_joy = 0
-                    try:
-                        avg_NRCL_fear = round(statistics.mean(NRCL_fear),2)
-                    except:
-                        avg_NRCL_fear = 0
-                    try:
-                        avg_NRCL_anger = round(statistics.mean(NRCL_anger),2)
-                    except:
-                        avg_NRCL_anger = 0
-                    try:
-                        avg_NRCL_sadness = round(statistics.mean(NRCL_positive),2)
-                    except:
-                        avg_NRCL_sadness = 0
-                    try:
-                        avg_NRCL_disgust = round(statistics.mean(NRCL_disgust),2)
-                    except:
-                        avg_NRCL_disgust = 0
-                    try:
-                        avg_VAD_valence = round(statistics.mean(VAD_valence),2)
-                    except:
-                        avg_VAD_valence = 0
-                    try:
-                        avg_VAD_arousal = round(statistics.mean(VAD_arousal),2)
-                    except:
-                        avg_VAD_arousal = 0
-                    try:
-                        avg_VAD_dominance = round(statistics.mean(VAD_dominance),2)
-                    except:
-                        avg_VAD_dominance = 0
-                    try:
-                        avg_taboo_rate = round(statistics.mean(taboo_rate),2)
-                    except:
-                        avg_taboo_rate = 0
+                    LNA, LNP = self._Lancaster_Sensorimotor_lexicon(all_tokenized_texts, LNA_lexicon, LNP_lexicon)
+                    taboo_rate = self._taboo_lexicon(all_filtered_words, taboo_lexicon)
+                    VAD = self._VAD_lexicon(all_filtered_words, VAD_Lexicon_Arousal, VAD_Lexicon_Dominance, VAD_Lexicon_Valence)
+                    NRCL_affect_frequencies = self._NRCL_affect_lexicon(all_filtered_texts)
 
                     # user dict with avgs metrics
                     users_stats[pretty_username] = {'avg_word_count': round(statistics.mean(word_count),2), 'avg_unique_words': round(statistics.mean(unique_words_cnt),2), 
                     'avg_lexical_diversity': round(statistics.mean(lexical_diversity),2), 'avg_vader_positive': round(statistics.mean(vader_positive),2), 
                     'avg_vader_negative': round(statistics.mean(vader_negative),2), 'avg_vader_neutral': round(statistics.mean(vader_neutral),2), 'avg_vader_compound': round(statistics.mean(vader_compound),2), 
-                    'avg_textblob_polarity': round(statistics.mean(textblob_polarity),2), 'avg_textblob_subjectivity': round(statistics.mean(textblob_subjectivity),2), 'avg_NRCL_positive': avg_NRCL_positive,
-                    'avg_NRCL_negative': avg_NRCL_negative, 'avg_NRCL_anticipation': avg_NRCL_anticipation, 'avg_NRCL_surprise': avg_NRCL_surprise,
-                    'avg_NRCL_trust': avg_NRCL_trust, 'avg_NRCL_joy': avg_NRCL_joy, 'avg_NRCL_fear': avg_NRCL_fear, 'avg_NRCL_anger': avg_NRCL_anger,
-                    'avg_NRCL_sadness': avg_NRCL_sadness, 'avg_NRCL_disgust': avg_NRCL_disgust, 'avg_VAD_dominance': avg_VAD_dominance,
-                    'avg_VAD_arousal': avg_VAD_arousal,'avg_VAD_valence': avg_VAD_valence, 'avg_taboo_rate': avg_taboo_rate, 'LNA_majority_class': max(LNA.items(), key=operator.itemgetter(1))[0], 'LNP_majority_class': max(LNP.items(), key=operator.itemgetter(1))[0]}
-
-                nodes, word_count, unique_words_cnt, lexical_diversity, vader_positive, vader_negative, vader_neutral, vader_compound, textblob_polarity, textblob_subjectivity, NRCL_positive, NRCL_negative, NRCL_anticipation, NRCL_surprise, NRCL_trust, NRCL_joy, NRCL_fear, NRCL_anger, NRCL_sadness, NRCL_disgust, VAD_dominance, VAD_arousal, VAD_valence, taboo_rate, LNA, LNP = ([] for i in range(26))    
+                    'avg_textblob_polarity': round(statistics.mean(textblob_polarity),2), 'avg_textblob_subjectivity': round(statistics.mean(textblob_subjectivity),2), 'avg_NRCL_positive': round(NRCL_affect_frequencies['positive'], 2),
+                    'avg_NRCL_negative': round(NRCL_affect_frequencies['negative'], 2), 'avg_NRCL_anticipation': round(NRCL_affect_frequencies['anticip'], 2), 'avg_NRCL_surprise': round(NRCL_affect_frequencies['surprise'], 2),
+                    'avg_NRCL_trust': round(NRCL_affect_frequencies['trust'], 2), 'avg_NRCL_joy': round(NRCL_affect_frequencies['joy'], 2), 'avg_NRCL_fear': round(NRCL_affect_frequencies['fear'], 2), 'avg_NRCL_anger': round(NRCL_affect_frequencies['anger'], 2),
+                    'avg_NRCL_sadness': round(NRCL_affect_frequencies['sadness'], 2), 'avg_NRCL_disgust': round(NRCL_affect_frequencies['disgust'], 2), 'avg_VAD_dominance': VAD['dominance'],
+                    'avg_VAD_arousal': VAD['arousal'],'avg_VAD_valence': VAD['valence'], 'avg_taboo_rate': taboo_rate, 'cnt_LNA_Hand_arm': LNA['Hand_arm'],'cnt_LNA_Mouth': LNA['Mouth'], 'cnt_LNA_Head': LNA['Head'], 
+                    'cnt_LNA_Torso': LNA['Torso'], 'cnt_LNA_Foot_leg': LNA['Foot_leg'], 'cnt_LNP_Visual': LNP['Visual'], 'cnt_LNP_Olfactory': LNP['Olfactory'],
+                    'cnt_LNP_Haptic': LNP['Haptic'], 'cnt_LNP_Auditory': LNP['Auditory'], 'cnt_LNP_Interoceptive': LNP['Interoceptive'], 'cnt_LNP_Gustatory': LNP['Gustatory'] }
+                
+                nodes, word_count, unique_words_cnt, lexical_diversity, vader_positive, vader_negative, vader_neutral, vader_compound, textblob_polarity, textblob_subjectivity, NRCL_positive, NRCL_negative, NRCL_anticipation, NRCL_surprise, NRCL_trust, NRCL_joy, NRCL_fear, NRCL_anger, NRCL_sadness, NRCL_disgust, VAD_dominance, VAD_arousal, VAD_valence, taboo_rate, LNA_handarm, LNA_mouth, LNA_head, LNA_torso, LNA_footleg, LNP_visual, LNP_olfactory, LNP_haptic, LNP_auditory, LNP_interoceptive, LNP_gustatory = ([] for i in range(35))    
                 for user in users_stats:
                     nodes.append(user)
                     word_count.append(users_stats[user]['avg_word_count'])
@@ -324,13 +308,25 @@ class TextStatisticGenerator():
                     VAD_dominance.append(users_stats[user]['avg_VAD_dominance'])
                     VAD_arousal.append(users_stats[user]['avg_VAD_arousal'])
                     VAD_valence.append(users_stats[user]['avg_VAD_valence'])
-                    taboo_rate.append(users_stats[user]['avg_taboo_rate'])
-                    LNA.append(users_stats[user]['LNA_majority_class'])
-                    LNP.append(users_stats[user]['LNP_majority_class'])
+                    taboo_rate.append(users_stats[user]['avg_taboo_rate'])      
+                    LNA_footleg.append(users_stats[user]['cnt_LNA_Foot_leg'])
+                    LNA_handarm.append(users_stats[user]['cnt_LNA_Hand_arm'])
+                    LNA_head.append(users_stats[user]['cnt_LNA_Head'])
+                    LNA_mouth.append(users_stats[user]['cnt_LNA_Mouth'])
+                    LNA_torso.append(users_stats[user]['cnt_LNA_Torso'])
+                    LNP_auditory.append(users_stats[user]['cnt_LNP_Auditory'])
+                    LNP_gustatory.append(users_stats[user]['cnt_LNP_Gustatory'])
+                    LNP_haptic.append(users_stats[user]['cnt_LNP_Haptic'])
+                    LNP_interoceptive.append(users_stats[user]['cnt_LNP_Interoceptive'])
+                    LNP_olfactory.append(users_stats[user]['cnt_LNP_Olfactory'])
+                    LNP_visual.append(users_stats[user]['cnt_LNP_Visual'])
+                    
 
                 _tmp = {'Id': nodes, 'avg_word_count': word_count, 'avg_unique_words': unique_words_cnt, 'avg_lexical_diversity': lexical_diversity, 'avg_vader_positive': vader_positive, 'avg_vader_negative': vader_negative, 'avg_vader_neutral': vader_neutral, 'avg_vader_compound': vader_compound, 'avg_textblob_polarity': textblob_polarity, 'avg_textblob_subjectivity': textblob_subjectivity,
                         'avg_NRCL_positive': NRCL_positive, 'avg_NRCL_negative': NRCL_negative, 'avg_NRCL_anticipation': NRCL_anticipation, 'avg_NRCL_surprise': NRCL_surprise,
-                        'avg_NRCL_trust': NRCL_trust, 'avg_NRCL_joy': NRCL_joy,  'avg_NRCL_fear': NRCL_fear, 'avg_NRCL_anger': NRCL_anger, 'avg_NRCL_sadness': NRCL_sadness, 'avg_NRCL_disgust': NRCL_disgust, 'avg_VAD_arousal': VAD_arousal, 'avg_VAD_dominance': VAD_dominance, 'avg_VAD_valence': VAD_valence, 'avg_taboo_rate': taboo_rate, 'LNA_majority_class': LNA, 'LNP_majority_class': LNP}
+                        'avg_NRCL_trust': NRCL_trust, 'avg_NRCL_joy': NRCL_joy,  'avg_NRCL_fear': NRCL_fear, 'avg_NRCL_anger': NRCL_anger, 'avg_NRCL_sadness': NRCL_sadness, 'avg_NRCL_disgust': NRCL_disgust, 'avg_VAD_arousal': VAD_arousal, 'avg_VAD_dominance': VAD_dominance, 'avg_VAD_valence': VAD_valence, 'avg_taboo_rate': taboo_rate, 
+                        'cnt_LNA_Foot_leg': LNA_footleg, 'cnt_LNA_Hand_arm': LNA_handarm, 'cnt_LNA_Head': LNA_head, 'cnt_LNA_Mouth': LNA_mouth, 'cnt_LNA_Torso': LNA_torso, 'cnt_LNP_Auditory': LNP_auditory, 'cnt_LNP_Gustatory': LNP_gustatory, 'cnt_LNP_Haptic': LNP_haptic, 'cnt_LNP_Interoceptive': LNP_interoceptive, 'cnt_LNP_Olfactory': LNP_olfactory,
+                        'cnt_LNP_Visual': LNP_visual}
                 node_labels = pd.DataFrame(_tmp)
                 print('n_users:', len(users_stats))
                 last_path = os.path.join(textstats_category, f'{period}.csv')
@@ -339,6 +335,7 @@ class TextStatisticGenerator():
                 period_filename = os.path.join(textstats_category, f'{period}.json')
                 with open(period_filename, 'w') as fp:
                     json.dump(users_stats, fp, sort_keys=True, indent=4)
+                print("--- %s seconds ---" % (time.time() - start_time))
 
 if __name__ == '__main__':
     cwd = os.getcwd()
@@ -346,9 +343,10 @@ if __name__ == '__main__':
     out_folder = 'RedditHandler_Outputs'
     extract_post = True
     extract_comment = True
-    category = {'gun':['guncontrol'], 'politics':['EnoughTrumpSpam','Fuckthealtright']}
-    start_date = '13/12/2018'
-    end_date = '13/02/2019'
+    category = {'anxiety':['Anxiety','Anxietyhelp','anxietysuccess','anxietysupporters','socialanxiety','HealthAnxiety','ptsd','PTSDCombat','CPTSD','traumatoolbox','PanicParty','domesticviolence']}
+    start_date = '01/05/2018'
+    end_date = '01/07/2018'
+    start_time = time.time()
     my_stats_generator = TextStatisticGenerator(out_folder, extract_post, extract_comment, category, start_date, end_date)
     my_stats_generator.extract_statistics()
 

@@ -204,7 +204,7 @@ class RedditHandler:
                                         post[attr] = None
                                     elif (attr != 'selftext') and (attr != 'title'): # saving only clean text
                                         post[attr] = raw_post[attr]
-                                if len(post['clean_text']) > 1:  # avoiding empty posts
+                                if len(post['clean_text']) > 2:  # avoiding empty posts
                                     if user_id not in users.keys():
                                         if self.extract_post and self.extract_comment:
                                             users[user_id] = {'posts':[], 'comments':[]}
@@ -275,7 +275,7 @@ class RedditHandler:
                                         comment[attr] = None
                                     elif attr != 'body': # saving only clean text
                                         comment[attr] = raw_comment[attr]
-                                if len(comment['clean_text']) > 1: # avoiding empty comments
+                                if len(comment['clean_text']) > 2: # avoiding empty comments
                                     if user_id not in users.keys():
                                         if self.extract_post and self.extract_comment:
                                             users[user_id] = {'posts':[], 'comments':[]} 
@@ -287,9 +287,9 @@ class RedditHandler:
                         pretty_current_date_comment = datetime.datetime.utcfromtimestamp(current_date_comment).strftime('%Y-%m-%d')
                         print(f'Extracted comments until date: {pretty_current_date_comment}')
                 print(f'Finished data extraction for subreddit {sub}')
-            # zip category folder
+            # zip category folder 
             shutil.make_archive(path_category, 'zip', path_category) 
-            shutil.rmtree(path_category)  
+            shutil.rmtree(path_category) 
             print('Done to extract data from category:', categories_keys[i])
             i+=1 #to iter over categories elements
     
@@ -395,7 +395,7 @@ if __name__ == '__main__':
     out_folder = 'RedditHandler_Outputs'
     extract_post = True
     extract_comment = True
-    category = {'gun':['guncontrol'], 'politics':['EnoughTrumpSpam','Fuckthealtright']}
+    category = {'gun':['guncontrol']}
     start_date = '13/12/2018'
     end_date = '13/03/2019'
     n_months = 1
@@ -404,5 +404,5 @@ if __name__ == '__main__':
     #default comment attributes
     comment_attributes = ['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score']
     my_handler = RedditHandler(out_folder, extract_post, extract_comment, category, start_date, end_date, n_months=n_months, post_attributes=post_attributes, comment_attributes=comment_attributes)
-    #my_handler.extract_data()
+    my_handler.extract_data()
     my_handler.create_network()
