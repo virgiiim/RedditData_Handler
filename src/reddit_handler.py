@@ -1,4 +1,5 @@
 import datetime
+from datetime import date
 from dateutil.relativedelta import relativedelta
 import time
 import requests
@@ -18,7 +19,7 @@ class RedditHandler:
     ''' 
     class responsible for extracting and processing reddit data and the creation of users' network
     '''
-    def __init__(self, out_folder, extract_post, extract_comment, categories, start_date, end_date, n_months=1, post_attributes=['id','author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title'], comment_attributes=['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score']):
+    def __init__(self, out_folder, extract_post, extract_comment, post_attributes=['id','author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title'], comment_attributes=['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score']):
         '''
         Parameters
         ----------
@@ -28,14 +29,6 @@ class RedditHandler:
             True if you want to extract Post data, False otherwise
         extract_comment : bool
             True if you want to extract Comment data, False otherwise
-        categories : dict
-            dict with category name as key and list of subreddits in that category as value
-        start_date : str
-            beginning date in format %d/%m/%Y
-        end_date : str
-            end date in format %d/%m/%Y
-        n_months : int
-            integer inicating the time period considered 
         post_attributes : list, optional
             post's attributes to be selected. The default is ['id','author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title']
         comment_attributes : list, optional
@@ -47,20 +40,10 @@ class RedditHandler:
             os.mkdir(self.out_folder)
         self.extract_post = extract_post
         self.extract_comment = extract_comment
-        self.categories = categories
-        # transforming date in a suitable format for folder name (category)
-        self.pretty_start_date = start_date.replace('/','-')
-        self.pretty_end_date = end_date.replace('/','-')
-        self.real_start_date = start_date # TODO metti nome piu carino
-        self.real_end_date = end_date # TODO metti nome piu carino
-        # converting date from format %d/%m/%Y to UNIX timestamp as requested by API
-        self.start_date = int(time.mktime(datetime.datetime.strptime(start_date, "%d/%m/%Y").timetuple()))
-        self.end_date = int(time.mktime(datetime.datetime.strptime(end_date, "%d/%m/%Y").timetuple()))
-        self.n_months = n_months
         self.post_attributes = post_attributes 
         self.comment_attributes = comment_attributes 
    
-    def _post_request_API(self, start_date, end_date, subreddit):
+    def _post_request_API_periodical(self, start_date, end_date, subreddit):
         '''
         API REQUEST to pushishift.io/reddit/submission
         returns a list of 1000 dictionaries where each of them is a post 
@@ -71,11 +54,25 @@ class RedditHandler:
             time.sleep(random.random()*0.02) 
             data = json.loads(r.text) # r.text is a JSON object, converted into dict
         except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError):
-            return self._post_request_API(start_date, end_date, subreddit)
+            return self._post_request_API_periodical(start_date, end_date, subreddit)
+        return data['data'] # data['data'] contains list of posts   
+    
+    def _post_request_API_user(self, start_date, end_date, username):
+        '''
+        API REQUEST to pushishift.io/reddit/submission
+        returns a list of 1000 dictionaries where each of them is a post 
+        '''
+        url = 'https://api.pushshift.io/reddit/search/submission?&size=500&after='+str(start_date)+'&before='+str(end_date)+'&author='+str(username)
+        try:
+            r = requests.get(url) # Response Object
+            time.sleep(random.random()*0.02) 
+            data = json.loads(r.text) # r.text is a JSON object, converted into dict
+        except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError):
+            return self._post_request_API_user(start_date, end_date, username)
         return data['data'] # data['data'] contains list of posts   
 
 
-    def _comment_request_API(self, start_date, end_date, subreddit):
+    def _comment_request_API_periodical(self, start_date, end_date, subreddit):
         '''
         API REQUEST to pushishift.io/reddit/comment
         returns a list of 1000 dictionaries where each of them is a comment
@@ -86,7 +83,21 @@ class RedditHandler:
             time.sleep(random.random()*0.02) 
             data = json.loads(r.text) # r.text is a JSON object, converted into dict
         except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError):
-            return self._comment_request_API(start_date, end_date, subreddit)
+            return self._comment_request_API_periodical(start_date, end_date, subreddit)
+        return data['data'] # data['data'] contains list of comments  
+
+    def _comment_request_API_user(self, start_date, end_date, username):
+        '''
+        API REQUEST to pushishift.io/reddit/comment
+        returns a list of 1000 dictionaries where each of them is a comment
+        '''
+        url = 'https://api.pushshift.io/reddit/search/comment?&size=500&after='+str(start_date)+'&before='+str(end_date)+'&author='+str(username)
+        try:
+            r = requests.get(url) # Response Object
+            time.sleep(random.random()*0.02) 
+            data = json.loads(r.text) # r.text is a JSON object, converted into dict
+        except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError):
+            return self._comment_request_API_user(start_date, end_date, username)
         return data['data'] # data['data'] contains list of comments  
 
         
@@ -118,44 +129,62 @@ class RedditHandler:
         return text
 
     
-    def extract_data(self):
+    def extract_periodical_data(self, start_date, end_date, categories, n_months):
         '''
         extract Reddit data from a list of subreddits in a specific time-period
+        Paramters
+        ----------
+        start_date : str
+            beginning date in format %d/%m/%Y
+        end_date : str
+            end date in format %d/%m/%Y
+        categories : dict
+            dict with category name as key and list of subreddits in that category as value
+        n_months : int
+            integer indicating the time period considered, if you don't want it n_months = 0
         '''
+        # formatting date
+        pretty_start_date = start_date.replace('/','-')
+        pretty_end_date = end_date.replace('/','-')
+        real_start_date = start_date 
+        real_end_date = end_date 
+        # converting date from format %d/%m/%Y to UNIX timestamp as requested by API
+        start_date = int(time.mktime(datetime.datetime.strptime(start_date, "%d/%m/%Y").timetuple()))
+        end_date = int(time.mktime(datetime.datetime.strptime(end_date, "%d/%m/%Y").timetuple()))
         raw_data_folder = os.path.join(self.out_folder, 'Categories_raw_data')
         if not os.path.exists(raw_data_folder):
             os.mkdir(raw_data_folder)
-        categories_keys = list(self.categories.keys())
+        categories_keys = list(categories.keys())
         i = 0 #to iter over categories keys
-        for category in self.categories.keys():
+        for category in categories.keys():
             print(f'Extracting category: {categories_keys[i]}')
             users = dict() #users with post & comment shared in different subreddit belonging to the same category
-            for sub in self.categories[category]:
+            for sub in categories[category]:
                 print(f'Extracting subbredit: {sub}')
-                current_date_post = self.start_date
-                current_date_comment = self.start_date
+                current_date_post = start_date
+                current_date_comment = start_date
                 # handling time-period
-                if self.n_months == 0:
-                    period_post = (datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y"), datetime.datetime.strptime(self.real_end_date, "%d/%m/%Y"))
-                    period_comment = (datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y"), datetime.datetime.strptime(self.real_end_date, "%d/%m/%Y"))
+                if n_months == 0:
+                    period_post = (datetime.datetime.strptime(real_start_date, "%d/%m/%Y"), datetime.datetime.strptime(real_end_date, "%d/%m/%Y"))
+                    period_comment = (datetime.datetime.strptime(real_start_date, "%d/%m/%Y"), datetime.datetime.strptime(real_end_date, "%d/%m/%Y"))
                 else:
-                    end_period = datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y") + relativedelta(months=+self.n_months)
-                    period_post = (datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y"), end_period)
-                    period_comment = (datetime.datetime.strptime(self.real_start_date, "%d/%m/%Y"), end_period)
+                    end_period = datetime.datetime.strptime(real_start_date, "%d/%m/%Y") + relativedelta(months=+n_months)
+                    period_post = (datetime.datetime.strptime(real_start_date, "%d/%m/%Y"), end_period)
+                    period_comment = (datetime.datetime.strptime(real_start_date, "%d/%m/%Y"), end_period)
      
                 # extracting posts
                 if self.extract_post:
-                    posts = self._post_request_API(current_date_post, self.end_date, sub) #first call to API
+                    posts = self._post_request_API_periodical(current_date_post, end_date, sub) #first call to API
                     while len(posts) > 0: #collecting data until there are no more posts to extract in the time period considered
                         # TODO: check if sub exists!
                         for raw_post in posts: 
                             # saving posts for each period
                             current_date = datetime.datetime.utcfromtimestamp(raw_post['created_utc']).strftime("%d/%m/%Y")
                             condition1_post = datetime.datetime.strptime(current_date, "%d/%m/%Y") >= period_post[1]
-                            condition2_post = (datetime.datetime.strptime(current_date, "%d/%m/%Y") +  relativedelta(days=+1)) >= datetime.datetime.strptime(self.real_end_date, "%d/%m/%Y")
+                            condition2_post = (datetime.datetime.strptime(current_date, "%d/%m/%Y") +  relativedelta(days=+1)) >= datetime.datetime.strptime(real_end_date, "%d/%m/%Y")
                             if condition1_post or condition2_post: 
                                  # Saving data: for each category a folder 
-                                path_category = os.path.join(raw_data_folder, f'{categories_keys[i]}_{self.pretty_start_date}_{self.pretty_end_date}')
+                                path_category = os.path.join(raw_data_folder, f'{categories_keys[i]}_{pretty_start_date}_{pretty_end_date}')
                                 if not os.path.exists(path_category):
                                     os.mkdir(path_category)
                                 pretty_period0_post = period_post[0].strftime('%d/%m/%Y').replace('/','-')
@@ -177,7 +206,7 @@ class RedditHandler:
                                             json.dump(users[user], fp, sort_keys=True, indent=4)
                                 users = dict()
                                 if condition1_post:
-                                    period_post = (period_post[1], period_post[1] + relativedelta(months=+self.n_months))
+                                    period_post = (period_post[1], period_post[1] + relativedelta(months=+n_months))
                                     print('PERIOD_POST', period_post)
                                 elif condition2_post:
                                     break
@@ -194,10 +223,10 @@ class RedditHandler:
                                 merged_text = raw_post['title']+' '+raw_post['selftext']
                                 post['clean_text'] = self._clean_raw_text(merged_text)
                                 # adding field time_period in a readable format
-                                if self.n_months != 0: 
+                                if n_months != 0: 
                                     post['time_period'] = (period_post[0].strftime('%d/%m/%Y'), period_post[1].strftime('%d/%m/%Y')) 
                                 else:
-                                    post['time_period'] = (datetime.datetime.utcfromtimestamp(self.start_date).strftime("%d/%m/%Y"),datetime.datetime.utcfromtimestamp(self.end_date).strftime("%d/%m/%Y"))
+                                    post['time_period'] = (datetime.datetime.utcfromtimestamp(start_date).strftime("%d/%m/%Y"),datetime.datetime.utcfromtimestamp(end_date).strftime("%d/%m/%Y"))
                                 # selecting fields 
                                 for attr in self.post_attributes: 
                                     if attr not in raw_post.keys(): #handling missing values
@@ -212,22 +241,22 @@ class RedditHandler:
                                             users[user_id] = {'posts':[]}
                                     users[user_id]['posts'].append(post)
                         current_date_post = posts[-1]['created_utc'] # taking the UNIX timestamp date of the last record extracted
-                        posts = self._post_request_API(current_date_post, self.end_date, sub) 
+                        posts = self._post_request_API_periodical(current_date_post, end_date, sub) 
                         pretty_current_date_post = datetime.datetime.utcfromtimestamp(current_date_post).strftime('%Y-%m-%d')
                         print(f'Extracted posts until date: {pretty_current_date_post}')
 
                 # extracting comments
                 if self.extract_comment:
-                    comments = self._comment_request_API(current_date_comment, self.end_date, sub) # first call to API
+                    comments = self._comment_request_API_periodical(current_date_comment, end_date, sub) # first call to API
                     while len(comments) > 0: #collecting data until there are no more comments to extract in the time period considered
                         for raw_comment in comments:
                             # saving comments for each period 
                             current_date = datetime.datetime.utcfromtimestamp(raw_comment['created_utc']).strftime("%d/%m/%Y")
                             condition1_comment = datetime.datetime.strptime(current_date, "%d/%m/%Y") >= period_comment[1]
-                            condition2_comment = (datetime.datetime.strptime(current_date, "%d/%m/%Y") +  relativedelta(days=+1)) >= datetime.datetime.strptime(self.real_end_date, "%d/%m/%Y")
+                            condition2_comment = (datetime.datetime.strptime(current_date, "%d/%m/%Y") +  relativedelta(days=+1)) >= datetime.datetime.strptime(real_end_date, "%d/%m/%Y")
                             if condition1_comment or condition2_comment: # saving comment for period
                                  # Saving data: for each category a folder 
-                                path_category = os.path.join(raw_data_folder, f'{categories_keys[i]}_{self.pretty_start_date}_{self.pretty_end_date}')
+                                path_category = os.path.join(raw_data_folder, f'{categories_keys[i]}_{pretty_start_date}_{pretty_end_date}')
                                 if not os.path.exists(path_category):
                                     os.mkdir(path_category)
                                 pretty_period0_comment = period_comment[0].strftime('%d/%m/%Y').replace('/','-')
@@ -249,7 +278,7 @@ class RedditHandler:
                                             json.dump(users[user], fp, sort_keys=True, indent=4)
                                 users = dict()
                                 if condition1_comment:
-                                    period_comment = (period_comment[1], period_comment[1] + relativedelta(months=+self.n_months))
+                                    period_comment = (period_comment[1], period_comment[1] + relativedelta(months=+n_months))
                                     print('PERIOD_COMMENT', period_comment)
                                 elif condition2_comment:
                                     break
@@ -265,10 +294,10 @@ class RedditHandler:
                                 # cleaning body field
                                 comment['clean_text'] = self._clean_raw_text(raw_comment['body'])
                                 # adding time_period fieldin a readable format
-                                if self.n_months != 0: 
+                                if n_months != 0: 
                                     comment['time_period'] = (period_comment[0].strftime('%d/%m/%Y'), period_comment[1].strftime('%d/%m/%Y')) 
                                 else:
-                                    comment['time_period'] = (datetime.datetime.utcfromtimestamp(self.start_date).strftime("%d/%m/%Y"),datetime.datetime.utcfromtimestamp(self.end_date).strftime("%d/%m/%Y"))
+                                    comment['time_period'] = (datetime.datetime.utcfromtimestamp(start_date).strftime("%d/%m/%Y"),datetime.datetime.utcfromtimestamp(end_date).strftime("%d/%m/%Y"))
                                 # selecting fields
                                 for attr in self.comment_attributes: 
                                     if attr not in raw_comment.keys(): #handling missing values
@@ -283,7 +312,7 @@ class RedditHandler:
                                             users[user_id] = {'comments':[]} 
                                     users[user_id]['comments'].append(comment)
                         current_date_comment = comments[-1]['created_utc'] # taking the UNIX timestamp date of the last record extracted
-                        comments = self._comment_request_API(current_date_comment, self.end_date, sub) 
+                        comments = self._comment_request_API_periodical(current_date_comment, end_date, sub) 
                         pretty_current_date_comment = datetime.datetime.utcfromtimestamp(current_date_comment).strftime('%Y-%m-%d')
                         print(f'Extracted comments until date: {pretty_current_date_comment}')
                 print(f'Finished data extraction for subreddit {sub}')
@@ -293,36 +322,150 @@ class RedditHandler:
             print('Done to extract data from category:', categories_keys[i])
             i+=1 #to iter over categories elements
     
-
-    def create_network(self): 
+    def extract_user_data(self, users_list, start_date=None, end_date=None):
         '''
-        crate users' interaction network based on comments:
+        extract data (i.e., posts and/or comments) of one or more Reddit users 
+        Paramters
+        ----------
+        users_list : list
+            list with Reddit users' usernames 
+        start_date : str
+            beginning date in format %d/%m/%Y, None if you want start extracting data from Reddit beginning (i.e., 23/06/2005)
+        end_date : str
+            end date in format %d/%m/%Y, None if you want end extracting data at today date
+
+        '''
+        # creating folder to record user activities
+        raw_data_folder = os.path.join(self.out_folder, 'User_data')
+        if not os.path.exists(raw_data_folder):
+            os.mkdir(raw_data_folder)
+        # handling dates (i.e., when starting and ending extract data)
+        if start_date == None:
+            start_date = '23/06/2005' # start_date = when Reddit was launched
+        if end_date == None:
+            end_date = date.today()
+            end_date = end_date.strftime("%d/%m/%Y") # end_date = current date
+        # converting date from format %d/%m/%Y to UNIX timestamp as requested by API
+        start_date = int(time.mktime(datetime.datetime.strptime(start_date, "%d/%m/%Y").timetuple()))
+        end_date = int(time.mktime(datetime.datetime.strptime(end_date, "%d/%m/%Y").timetuple()))
+        users = dict() 
+        for username in users_list:
+            print("Begin data extraction for user:", username)
+            current_date_post = start_date
+            current_date_comment = start_date
+            # extracting posts
+            if self.extract_post:
+                posts = self._post_request_API_user(current_date_post, end_date, username) #first call to API # TODO change API
+                while len(posts) > 0: #collecting data until reaching the end_date
+                    # TODO: check if sub exists!
+                    for raw_post in posts: 
+                        user_id = raw_post['author']
+                        if user_id not in users.keys():
+                            if self.extract_post and self.extract_comment:
+                                users[user_id] = {'posts':[], 'comments':[]}
+                            else:
+                                users[user_id] = {'posts':[]}
+                        post = dict() #dict to store posts
+                        # adding field date in a readable format
+                        post['date'] = datetime.datetime.utcfromtimestamp(raw_post['created_utc']).strftime("%d/%m/%Y")
+                        # cleaning body field
+                        try:
+                            merged_text = raw_post['title']+' '+raw_post['selftext']
+                        except:
+                            merged_text = raw_post['title']
+                        post['clean_text'] = self._clean_raw_text(merged_text)
+                        # selecting fields 
+                        for attr in self.post_attributes: 
+                            if attr not in raw_post.keys(): #handling missing values
+                                post[attr] = None
+                            elif (attr != 'selftext') and (attr != 'title'): # saving only clean text
+                                post[attr] = raw_post[attr]
+                        users[user_id]['posts'].append(post)
+                    current_date_post = posts[-1]['created_utc'] # taking the UNIX timestamp date of the last record extracted
+                    posts = self._post_request_API_user(current_date_post, end_date, username) 
+                    pretty_current_date_post = datetime.datetime.utcfromtimestamp(current_date_post).strftime('%Y-%m-%d')
+                    print(f'Extracted posts until date: {pretty_current_date_post}')
+
+            # extracting comments
+            if self.extract_comment:
+                comments = self._comment_request_API_user(current_date_comment, end_date, username) # first call to API
+                while len(comments) > 0:
+                    for raw_comment in comments: 
+                        user_id = raw_comment['author']
+                        if user_id not in users.keys():
+                            if self.extract_post and self.extract_comment:
+                                users[user_id] = {'posts':[], 'comments':[]} 
+                            else:
+                                users[user_id] = {'comments':[]} 
+                        comment = dict() # dict to store a comment
+                        # adding field date in a readable format
+                        comment['date'] = datetime.datetime.utcfromtimestamp(raw_comment['created_utc']).strftime("%d/%m/%Y")
+                        # cleaning body field
+                        comment['clean_text'] = self._clean_raw_text(raw_comment['body'])
+                        # selecting fields
+                        for attr in self.comment_attributes: 
+                            if attr not in raw_comment.keys(): #handling missing values
+                                comment[attr] = None
+                            elif attr != 'body': # saving only clean text
+                                comment[attr] = raw_comment[attr]
+                        users[user_id]['comments'].append(comment)
+                    current_date_comment = comments[-1]['created_utc'] # taking the UNIX timestamp date of the last record extracted
+                    comments = self._comment_request_API_user(current_date_comment, end_date, username) 
+                    pretty_current_date_comment = datetime.datetime.utcfromtimestamp(current_date_comment).strftime('%Y-%m-%d')
+                    print(f'Extracted comments until date: {pretty_current_date_comment}')
+            print('Finish data extraction for user:', username)
+
+        # saving data: for each user a json file
+        for user in users: 
+            user_filename = os.path.join(raw_data_folder, f'{user}.json')
+            with open(user_filename, 'w') as fp:
+                json.dump(users[user], fp, sort_keys=True, indent=4)
+        print('Done to extract data for all selected users', users_list)
+
+
+
+    def create_network(self, start_date, end_date, categories): 
+        '''
+        create users' interaction network based on comments:
         type of network: directed and weighted by number of interactions 
         self loops are not allowed
+        Paramters
+        ----------
+        start_date : str
+            beginning date in format %d/%m/%Y
+        end_date : str
+            end date in format %d/%m/%Y
+        categories : dict
+            dict with category name as key and list of subreddits in that category as value
         '''
         if not self.extract_comment or not self.extract_post: # if user wants to create users interactions networks it is necessary to extract both posts and comments in extract_data()
             raise ValueError('To create users interactions Networks you have to set self.extract_comment to True')
+        # formatting date
+        pretty_start_date = start_date.replace('/','-')
+        pretty_end_date = end_date.replace('/','-')
         # creating folder with network data
         user_network_folder = os.path.join(self.out_folder, 'Categories_networks')
         if not os.path.exists(user_network_folder):
             os.mkdir(user_network_folder)
         path = os.path.join(self.out_folder, 'Categories_raw_data')
-        categories = os.listdir(path) # returns list
+        _categories = os.listdir(path) # returns list
         # unzip files
         unzipped_categories = list()
-        for category in categories: 
+        for category in _categories: 
             category_name = ''.join([i for i in category if i.isalpha()]).replace('zip','')
-            if (category_name in list(self.categories.keys())) and (self.pretty_start_date in category) and (self.pretty_end_date in category):
+            if (category_name in list(categories.keys())) and (pretty_start_date in category) and (pretty_end_date in category):
                 file_name = os.path.abspath(os.path.join(path,category))
                 if not zipfile.is_zipfile(file_name):
                     unzipped_filename = os.path.basename(file_name)
                     unzipped_categories.append(unzipped_filename)
-                elif os.path.basename(file_name).replace('.zip','') not in categories:
+                elif os.path.basename(file_name).replace('.zip','') not in _categories:
                     unzipped_filename = os.path.basename(file_name).replace('.zip','')
                     extract_dir = file_name.replace('.zip','')
                     shutil.unpack_archive(file_name, extract_dir, 'zip') 
                     unzipped_categories.append(unzipped_filename)
         print('unzipped:', unzipped_categories)
+        if not unzipped_categories:
+            raise ValueError('No data avaiable for the selected time period and/or subreddits, please extract them through extract_periodical_data() before create_network() call')
 
         # Saving data: for each category a folder 
         for category in unzipped_categories:
@@ -390,19 +533,29 @@ class RedditHandler:
                 edge_list.to_csv(last_path, index =False)
 
 if __name__ == '__main__':
+    # initializing RedditHandler
     cwd = os.getcwd()
     out_folder = os.path.join(cwd, 'RedditHandler_Outputs')
     out_folder = 'RedditHandler_Outputs'
-    extract_post = True
-    extract_comment = True
-    category = {'gun':['guncontrol']}
+    extract_post = True # True if you want to extract Post data, False otherwise
+    extract_comment = True # True if you want to extract Comment data, False otherwise
+    post_attributes = ['id','author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title'] # default 
+    comment_attributes = ['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score'] # default 
+    my_handler = RedditHandler(out_folder, extract_post, extract_comment, post_attributes=post_attributes, comment_attributes=comment_attributes)
+
+    # extracting periodical data
+    '''
+            categories : dict
+                dict with category name as key and list of subreddits in that category as value
+            start_date : str
+                beginning date in format %d/%m/%Y
+            end_date : str
+                end date in format %d/%m/%Y
+            n_months : int
+                integer inicating the time period considered '''
     start_date = '13/12/2018'
-    end_date = '13/03/2019'
-    n_months = 1
-    #default post attributes
-    post_attributes = ['id','author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title']
-    #default comment attributes
-    comment_attributes = ['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score']
-    my_handler = RedditHandler(out_folder, extract_post, extract_comment, category, start_date, end_date, n_months=n_months, post_attributes=post_attributes, comment_attributes=comment_attributes)
-    my_handler.extract_data()
-    my_handler.create_network()
+    end_date = '13/02/2019'
+    category = {'gun':['guncontrol']}
+    n_months = 1  # time_period to consider: if you don't want it n_months = 0
+    my_handler.extract_periodical_data(start_date, end_date, category, n_months)
+    my_handler.create_network(start_date, end_date, category)
