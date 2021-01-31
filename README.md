@@ -1,4 +1,4 @@
-# RedditHandler Documentation
+# RedditHandler 
 RedditHandler is a Python module that allows to extract and clean Reddit data (i.e., posts and/or comments), as well as to create user interactions networks from extracted data.
 ## RedditHandler Object
 **Parameters**
