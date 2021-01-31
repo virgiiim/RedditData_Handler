@@ -1,5 +1,5 @@
 # RedditHandler 
-RedditHandler is a Python module that allows to extract and clean Reddit data (i.e., posts and/or comments), as well as to create user interactions networks from extracted data.
+RedditHandler is a Python class that allows to extract and clean Reddit data (i.e., posts and/or comments), as well as to create user interactions networks from extracted data.
 ## RedditHandler Object
 **Parameters**
 + *out_folder* (str): path of the output folder
@@ -19,7 +19,7 @@ comment_attributes = ['id', 'author', 'created_utc', 'link_id', 'parent_id', 'su
 my_handler = RedditHandler(out_folder, extract_post, extract_comment, post_attributes=post_attributes, comment_attributes=comment_attributes)
 ```
 ### RedditHandler.extract_periodical_data(start_date, end_date, categories, n_months) 
-Extract Reddit data from a list of subreddits in a specific time-period. 
+Extract Reddit data from a list of subreddits (i.e., category) in a specific time-period and save them, for each category and time-period, in a folder containing one JSON file for each user.
 
 **Parameters**
 + *start_date* (str): beginning date in format %d/%m/%Y
@@ -37,7 +37,7 @@ n_months = 1
 my_handler.extract_periodical_data(start_date, end_date, category, n_months)
 ```
 ### RedditHandler.extract_user_data(users_list, start_date=None, end_date=None) 
-Extract data (i.e., posts and/or comments) of one or more Reddit users.
+Extract data (i.e., posts and/or comments) of one or more Reddit users and save them in a JSON file (one for each user).
 
 **Parameters**
 + *users_list* (list): list with Reddit users' username
@@ -53,7 +53,7 @@ end_date = None
 my_handler.extract_user_data(users_list, start_date=start_date, end_date=end_date)
 ```
 ### RedditHandler.create_network(start_date, end_date, categories)
-Create users' interaction network based on comments (*type of network*: directed and weighted by number of interactions).
+Create users' interaction network based on comments (*type of network*: directed and weighted by number of interactions) and save it in a csv file 'from, to, weight'.
 
 **Parameters** 
 + *start_date* (str): beginning date in format %d/%m/%Y
