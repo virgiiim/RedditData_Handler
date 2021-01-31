@@ -27,8 +27,6 @@ Extract Reddit data from a list of subreddits in a specific time-period.
 + *categories* (dict): dict with arbitrary category name as key and list of subreddits in that category as value
 + *n_months* (int): integer indicating the time period considered, if you don't want it n_months = 0 
 
-**Returns**
-
 **Example**
 ```
 from src.reddit_handler import RedditHandler
@@ -46,8 +44,6 @@ Extract data (i.e., posts and/or comments) of one or more Reddit users.
 + *start_date* (str): beginning date in format %d/%m/%Y, None if you want start extracting data from Reddit beginning (i.e., 23/06/2005)
 + *end_date* (str): end date in format %d/%m/%Y, None if you want end extracting data at today date
 
-**Returns**
-
 **Example**
 ```
 from src.reddit_handler import RedditHandler
@@ -63,8 +59,6 @@ Create users' interaction network based on comments (*type of network*: directed
 + *start_date* (str): beginning date in format %d/%m/%Y
 + *end_date* (str): end date in format %d/%m/%Y
 + *categories* (dict): dict with arbitrary category name as key and list of subreddits in that category as value 
-
-**Returns**
 
 **Example**
 ```
