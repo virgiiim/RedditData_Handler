@@ -55,9 +55,8 @@ users_list = ['17michela', 'BelleAriel', 'EschewObfuscation10']
 start_date = None 
 end_date = None
 my_handler.extract_user_data(users_list, start_date=start_date, end_date=end_date)
-
 ```
-### RedditHandler.create_network(start_date, end_date, categories):
+### RedditHandler.create_network(start_date, end_date, categories)
 create users' interaction network based on comments.
 
 *type of network*: directed and weighted by number of interactions 
