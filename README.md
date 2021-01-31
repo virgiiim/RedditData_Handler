@@ -16,7 +16,7 @@ extract Reddit data from a list of subreddits in a specific time-period.
 + *categories* (dict): dict with category name as key and list of subreddits in that category as value
 + *n_months* (int): integer indicating the time period considered, if you don't want it n_months = 0
 **Returns**
-
+  ciaociaociao
 ### RedditHandler.extract_user_data(users_list, start_date=None, end_date=None):
 extract data (i.e., posts and/or comments) of one or more Reddit users 
 **Parameters**
