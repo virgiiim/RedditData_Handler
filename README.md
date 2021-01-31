@@ -12,10 +12,10 @@ RedditHandler is a Python module that allows to extract and clean Reddit data (i
 ```
 from src.reddit_handler import RedditHandler
 out_folder = 'RedditHandler_Outputs'
-extract_post = True # True if you want to extract Post data, False otherwise
-extract_comment = True # True if you want to extract Comment data, False otherwise 
-post_attributes = ['id','author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title'] # default 
-comment_attributes = ['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score'] # default 
+extract_post = True 
+extract_comment = True 
+post_attributes = ['id','author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title'] 
+comment_attributes = ['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score']
 my_handler = RedditHandler(out_folder, extract_post, extract_comment, post_attributes=post_attributes, comment_attributes=comment_attributes)
 ```
 ### RedditHandler.extract_periodical_data(start_date, end_date, categories, n_months) 
