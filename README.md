@@ -32,7 +32,7 @@ Extracts Reddit data from a list of subreddits (i.e., category) in a specific ti
 from src.reddit_handler import RedditHandler
 start_date = '14/12/2018'
 end_date = '14/02/2019'
-category = {'gun':['guncontrol'], ['fuckthealtright', 'politics']}
+category = {'gun':['guncontrol'], 'politic':['fuckthealtright', 'politics']}
 n_months = 1  
 my_handler.extract_periodical_data(start_date, end_date, category, n_months)
 ```
@@ -65,7 +65,7 @@ Creates users' interaction network based on comments and saves it in a csv file 
 from src.reddit_handler import RedditHandler
 start_date = '14/12/2018'
 end_date = '14/02/2019'
-category = {'gun':['guncontrol'], 'politic': ['fuckthealtright', 'politics']}
+category = {'gun':['guncontrol'], 'politic':['fuckthealtright', 'politics']}
 n_months = 1  
 my_handler.create_network(start_date, end_date, category)
 ```
