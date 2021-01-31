@@ -542,20 +542,14 @@ if __name__ == '__main__':
     post_attributes = ['id','author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title'] # default 
     comment_attributes = ['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score'] # default 
     my_handler = RedditHandler(out_folder, extract_post, extract_comment, post_attributes=post_attributes, comment_attributes=comment_attributes)
-
-    # extracting periodical data
-    '''
-            categories : dict
-                dict with category name as key and list of subreddits in that category as value
-            start_date : str
-                beginning date in format %d/%m/%Y
-            end_date : str
-                end date in format %d/%m/%Y
-            n_months : int
-                integer inicating the time period considered '''
     start_date = '13/12/2018'
     end_date = '13/02/2019'
     category = {'gun':['guncontrol']}
     n_months = 1  # time_period to consider: if you don't want it n_months = 0
     my_handler.extract_periodical_data(start_date, end_date, category, n_months)
     my_handler.create_network(start_date, end_date, category)
+    # extracting user data
+    users_list = ['17michela', 'BelleAriel', 'EschewObfuscation10'] # insert one or more Reddit username
+    start_date = None # None if you want start extracting from Reddit beginning, otherwise specify a date in format %d/%m/%Y 
+    end_date = None # None if you want end extracting at today date, otherwise specify a date in format %d/%m/%Y 
+    my_handler.extract_user_data(users_list, start_date=start_date, end_date=end_date)
