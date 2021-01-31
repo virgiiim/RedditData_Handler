@@ -7,4 +7,13 @@ RedditHandler is a Python module that allows to extract and clean Reddit data (i
 + *extract_comment* (bool): True if you want to extract Comment data, False otherwise
 + *post_attributes* (list): post's attributes to be selected. The default is ['id','author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext', 'stickied', 'subreddit', 'subreddit_id', 'title']
 + *comment_attributes* (list) : comment's attributes to be selected. The default is ['id', 'author', 'created_utc', 'link_id', 'parent_id', 'subreddit', 'subreddit_id', 'body', 'score']
-        '
+
+### Methods:
+#### extract_periodical_data(start_date, end_date, categories, n_months)
+**Parameters**
++
++
++
+**Returns**
+
+
