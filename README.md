@@ -29,8 +29,13 @@ extract data (i.e., posts and/or comments) of one or more Reddit users
 
 **Returns**
 
+**Example**
+```
+ciaoooooooo
+```
 ### RedditHandler.create_network(start_date, end_date, categories):
 create users' interaction network based on comments.
+
 *type of network*: directed and weighted by number of interactions 
 
 **Parameters** 
