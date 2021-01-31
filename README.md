@@ -53,7 +53,7 @@ end_date = None
 my_handler.extract_user_data(users_list, start_date=start_date, end_date=end_date)
 ```
 ### RedditHandler.create_network(start_date, end_date, categories)
-Create users' interaction network based on comments (*type of network*: directed and weighted by number of interactions) and save it in a csv file 'from, to, weight'.
+Create users' interaction network based on comments and save it in a csv file 'from, to, weight' (*type of network*: directed and weighted by number of interactions).
 
 **Parameters** 
 + *start_date* (str): beginning date in format %d/%m/%Y
