@@ -24,7 +24,7 @@ Extract Reddit data from a list of subreddits in a specific time-period.
 **Parameters**
 + *start_date* (str): beginning date in format %d/%m/%Y
 + *end_date* (str): end date in format %d/%m/%Y
-+ *categories* (dict): dict with category name as key and list of subreddits in that category as value
++ *categories* (dict): dict with arbitrary category name as key and list of subreddits in that category as value
 + *n_months* (int): integer indicating the time period considered, if you don't want it n_months = 0 
 
 **Returns**
@@ -34,7 +34,7 @@ Extract Reddit data from a list of subreddits in a specific time-period.
 from src.reddit_handler import RedditHandler
 start_date = '14/12/2018'
 end_date = '14/02/2019'
-category = {'gun':['guncontrol']}
+category = {'gun':['guncontrol'], ['fuckthealtright', 'politics']}
 n_months = 1  
 my_handler.extract_periodical_data(start_date, end_date, category, n_months)
 ```
@@ -62,7 +62,7 @@ Create users' interaction network based on comments (*type of network*: directed
 **Parameters** 
 + *start_date* (str): beginning date in format %d/%m/%Y
 + *end_date* (str): end date in format %d/%m/%Y
-+ *categories* (dict): dict with category name as key and list of subreddits in that category as value 
++ *categories* (dict): dict with arbitrary category name as key and list of subreddits in that category as value 
 
 **Returns**
 
@@ -71,7 +71,7 @@ Create users' interaction network based on comments (*type of network*: directed
 from src.reddit_handler import RedditHandler
 start_date = '14/12/2018'
 end_date = '14/02/2019'
-category = {'gun':['guncontrol']}
+category = {'gun':['guncontrol'], 'politic': ['fuckthealtright', 'politics']}
 n_months = 1  
 my_handler.create_network(start_date, end_date, category)
 ```
