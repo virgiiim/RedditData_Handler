@@ -1,0 +1,12 @@
+stop_words
+keras~=2.4.3
+tensorflow
+lexicalrichness~=0.1.3
+nltk~=3.5
+textblob~=0.15.3
+vaderSentiment~=3.3.2
+nrclex~=3.0.0
+requests~=2.23.0
+python-dateutil~=2.8.0
+numpy~=1.17.3
+pandas~=0.25.2
