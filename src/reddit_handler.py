@@ -596,7 +596,7 @@ class RedditHandler:
                 last_path = os.path.join(network_category, f'{period}.csv')
                 with open(last_path, "w") as out:
                     for nds, w in interactions.items():
-                        out.write(f"{nds[0]}\t{nds[1]}\t{w}\n")
+                        out.write(f"{nds[0]},{nds[1]},{w}\n")
                 # edge_list.to_csv(last_path, index=False)
 
 
