@@ -89,7 +89,8 @@ class RedditHandler:
             r = requests.get(url)  # Response Object
             time.sleep(random.random() * 0.02)
             data = json.loads(r.text)  # r.text is a JSON object, converted into dict
-        except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError):
+        except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError,
+                requests.exceptions.ChunkedEncodingError):
             return self.__post_request_API_periodical(start_date, end_date, subreddit)
         return data['data']  # data['data'] contains list of posts
 
@@ -104,7 +105,8 @@ class RedditHandler:
             r = requests.get(url)  # Response Object
             time.sleep(random.random() * 0.02)
             data = json.loads(r.text)  # r.text is a JSON object, converted into dict
-        except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError):
+        except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError,
+                requests.exceptions.ChunkedEncodingError):
             return self.__post_request_API_user(start_date, end_date, username)
         return data['data']  # data['data'] contains list of posts
 
@@ -119,7 +121,8 @@ class RedditHandler:
             r = requests.get(url)  # Response Object
             time.sleep(random.random() * 0.02)
             data = json.loads(r.text)  # r.text is a JSON object, converted into dict
-        except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError):
+        except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError,
+                requests.exceptions.ChunkedEncodingError):
             return self.__comment_request_API_periodical(start_date, end_date, subreddit)
         return data['data']  # data['data'] contains list of comments
 
@@ -134,7 +137,8 @@ class RedditHandler:
             r = requests.get(url)  # Response Object
             time.sleep(random.random() * 0.02)
             data = json.loads(r.text)  # r.text is a JSON object, converted into dict
-        except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError):
+        except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError,
+                requests.exceptions.ChunkedEncodingError):
             return self.__comment_request_API_user(start_date, end_date, username)
         return data['data']  # data['data'] contains list of comments
 
