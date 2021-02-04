@@ -10,6 +10,7 @@ import os.path
 import shutil
 import zipfile
 import string
+import glob
 import re
 
 __author__ = "Virginia Morini"
@@ -85,8 +86,6 @@ class RedditHandler:
         """
         url = 'https://api.pushshift.io/reddit/search/submission?&size=500&after=' + str(start_date) + '&before=' + str(
             end_date) + '&subreddit=' + str(subreddit)
-
-        print(url)
         try:
             r = requests.get(url)  # Response Object
             # time.sleep(random.random() * 0.02)
@@ -439,125 +438,46 @@ class RedditHandler:
                 json.dump(users[user], fp, sort_keys=True, indent=4)
         print('Done to extract data for all selected users', users_list)
 
-    def create_network(self, start_date, end_date, categories):
-        """
-        create users' interaction network based on comments:
-        type of network: directed and weighted by number of interactions
-        self loops are not allowed
+    def create_network(self, categories):
 
-        Parameters
-        ----------
-        start_date : str
-            beginning date in format %d/%m/%Y
-        end_date : str
-            end date in format %d/%m/%Y
-        categories : dict
-            dict with category name as key and list of subreddits in that category as value
-        """
-
-        # if user wants to create users interactions networks it is necessary to extract both posts and comments in
-        # extract_data()
         if not self.extract_comment or not self.extract_post:
             raise ValueError('To create users interactions Networks you have to set self.extract_comment to True')
-        # formatting date
-        pretty_start_date = start_date.replace('/', '-')
-        pretty_end_date = end_date.replace('/', '-')
-        # creating folder with network data
+
         user_network_folder = os.path.join(self.out_folder, 'Categories_networks')
         if not os.path.exists(user_network_folder):
             os.mkdir(user_network_folder)
         path = os.path.join(self.out_folder, 'Categories_raw_data')
-        _categories = os.listdir(path)  # returns list
-        # unzip files
-        unzipped_categories = list()
-        for cat in _categories:
-            category_name = ''.join([i for i in cat if i.isalpha()]).replace('zip', '')
-            if (category_name in list(categories.keys())) and (pretty_start_date in cat) and (
-                    pretty_end_date in cat):
-                file_name = os.path.abspath(os.path.join(path, cat))
-                if not zipfile.is_zipfile(file_name):
-                    unzipped_filename = os.path.basename(file_name)
-                    unzipped_categories.append(unzipped_filename)
-                elif os.path.basename(file_name).replace('.zip', '') not in _categories:
-                    unzipped_filename = os.path.basename(file_name).replace('.zip', '')
-                    extract_dir = file_name.replace('.zip', '')
-                    shutil.unpack_archive(file_name, extract_dir, 'zip')
-                    unzipped_categories.append(unzipped_filename)
-        print('unzipped:', unzipped_categories)
-        if not unzipped_categories:
-            raise ValueError(
-                'No data avaiable for the selected time period and/or subreddits, please extract them through '
-                'extract_periodical_data() before create_network() call')
 
-        # Saving data: for each category a folder 
-        for cat in unzipped_categories:
-            network_category = os.path.join(user_network_folder, f'{cat}')
-            if not os.path.exists(network_category):
-                os.mkdir(network_category)
-            path_category = os.path.join(path, cat)
-            category_periods = os.listdir(
-                path_category)  # for each category a list of all files (i.e., periods) in that category
-            for period in category_periods:
-                print('PERIOD:', period)
-                path_period = os.path.join(path_category, period)
-                users_list = os.listdir(path_period)
-                users = dict()
-                for user in users_list:
-                    user_filename = os.path.join(path_period, user)
-                    submission_ids = dict()
-                    comment_ids = dict()
-                    parent_ids = dict()
-                    with open(user_filename, 'r') as f:
-                        user_data = json.load(f)
-                        for comment in user_data['comments']:
-                            comment_ids[comment['id']] = None
-                            parent_ids[comment['parent_id']] = None
-                        for post in user_data['posts']:
-                            submission_ids[post['id']] = None
-                    pretty_username = user.replace('.json', '')
-                    if (len(submission_ids.keys()) > 0) or (len(comment_ids.keys()) > 0):
-                        users[pretty_username] = {'post_ids': submission_ids, 'comment_ids': comment_ids,
-                                                  'parent_ids': parent_ids}
-                interactions = dict()
-                # nodes = set()
-                for user in users:
-                    for parent_id in users[user]['parent_ids']:
-                        if "t3" in parent_id:  # it is a comment to a post
-                            for other_user in users:
-                                if parent_id.replace("t3_", "") in users[other_user]['post_ids']:
-                                    if user != other_user:  # avoiding self loops
-                                        # nodes.add(other_user)
-                                        # nodes.add(user)
-                                        if (user, other_user) not in interactions:
-                                            interactions[(user, other_user)] = 0
-                                        interactions[(user, other_user)] += 1
-                        elif "t1" in parent_id:  # it is a comment to another comment
-                            for other_user in users:
-                                if parent_id.replace("t1_", "") in users[other_user]['comment_ids']:
-                                    if user != other_user:  # avoiding self loops
-                                        # nodes.add(other_user)
-                                        # nodes.add(user)
-                                        if (user, other_user) not in interactions:
-                                            interactions[(user, other_user)] = 0
-                                        interactions[(user, other_user)] += 1
-                # print('n_edges', len(interactions))
-                # print('n_nodes', len(nodes))
-                # creating edge list csv file
-                # nodes_from = list()
-                # nodes_to = list()
-                # edges_weight = list()
-                # for interaction in interactions:
-                #     nodes_from.append(interaction[0])
-                #     nodes_to.append(interaction[1])
-                #     edges_weight.append(interactions[interaction])
-                # tmp = {'Source': nodes_from, 'Target': nodes_to, 'Weight': edges_weight}
-                # edge_list = pd.DataFrame(tmp)
-                # saving csv in category folder
-                last_path = os.path.join(network_category, f'{period}.csv')
-                with open(last_path, "w") as out:
-                    for nds, w in interactions.items():
-                        out.write(f"{nds[0]},{nds[1]},{w}\n")
-                # edge_list.to_csv(last_path, index=False)
+        for category in categories:
+            post_to_author = {}
+
+            users_path = os.path.join(path, category)
+
+            users_files = glob.glob(f"{users_path}{os.sep}*.json")
+            with open(os.path.join(user_network_folder, f"{category}.csv"), "w") as out:
+                for user_file in users_files:
+                    with open(user_file) as fp:
+                        data = json.loads(fp.read())
+                        for dt, comments in data['comments'].items():
+                            for comment in comments:
+                                res = f"{comment['id']},{comment['parent_id'].split('_')[1]},{comment['author']},,{dt}\n"
+                                post_to_author[comment['id']] = comment['author']
+                                out.write(res)
+                        for _, posts in data['posts'].items():
+                            for post in posts:
+                                post_to_author[post['id']] = post['author']
+
+            with open(os.path.join(user_network_folder, f"{category}.csv")) as f:
+                with open(os.path.join(user_network_folder, f"{category}_complete.csv"), "w") as out:
+                    for row in f:
+                        row = row.split(",")
+                        try:
+                            tid = post_to_author[row[1]]
+                            res = f"{row[0]},{row[1]},{row[2]},{tid},{row[4]}"
+                            out.write(res)
+                        except:
+                            pass
+            os.remove(os.path.join(user_network_folder, f"{category}.csv"))
 
 
 if __name__ == '__main__':
@@ -576,7 +496,7 @@ if __name__ == '__main__':
     end = '4/01/2020'
     selected_categories = {'finance': ['wallstreetbets']}
     my_handler.extract_periodical_data(start, end, selected_categories)
-    # my_handler.create_network(start, end, selected_categories)
+    my_handler.create_network(selected_categories)
     # extracting user data
     # usernames = ['17michela', 'BelleAriel', 'EschewObfuscation10']  # insert one or more Reddit username
 
