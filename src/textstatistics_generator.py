@@ -411,7 +411,7 @@ def sentiment_analysis(text, vader_positive, vader_negative, vader_neutral, vade
 
 if __name__ == '__main__':
     cwd = os.getcwd()
-    out_fold = os.path.join(cwd, 'RedditHandler_Outputs')
+    out_fold = os.path.join(cwd, '../RedditHandler_Outputs')
     ext_post = True
     ext_comment = True
     categories = {

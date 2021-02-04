@@ -85,6 +85,8 @@ class RedditHandler:
         """
         url = 'https://api.pushshift.io/reddit/search/submission?&size=500&after=' + str(start_date) + '&before=' + str(
             end_date) + '&subreddit=' + str(subreddit)
+
+        print(url)
         try:
             r = requests.get(url)  # Response Object
             # time.sleep(random.random() * 0.02)
@@ -144,28 +146,65 @@ class RedditHandler:
             return self.__comment_request_API_user(start_date, end_date, username)
         return data['data']  # data['data'] contains list of comments
 
-    def extract_periodical_data(self, start_date, end_date, categories, n_months):
-        """
-        extract Reddit data from a list of subreddits in a specific time-period
+    def __write_data(self, users, path):
+        pass
 
-        Parameters
-        ----------
-        start_date : str
-            beginning date in format %d/%m/%Y
-        end_date : str
-            end date in format %d/%m/%Y
-        categories : dict
-            dict with category name as key and list of subreddits in that category as value
-        n_months : int
-            integer indicating the time period considered, if you don't want it n_months = 0
-        """
+    def __process_post(self, raw_post, category, is_post=True):
+        user_id = raw_post['author']
+        post = dict()  # dict to store posts
+        # adding field category
+        post['category'] = category
+        # adding field date in a readable format
+        post['date'] = datetime.datetime.utcfromtimestamp(raw_post['created_utc']).strftime(
+            "%d/%m/%Y")
+        # cleaning body field
 
-        path_category = ""
-        # formatting date
-        pretty_start_date = start_date.replace('/', '-')
-        pretty_end_date = end_date.replace('/', '-')
-        real_start_date = start_date
-        real_end_date = end_date
+        if is_post:
+            merged_text = raw_post['title'] + ' ' + raw_post['selftext']
+            post['clean_text'] = clean_raw_text(merged_text)
+        else:
+            post['clean_text'] = clean_raw_text(raw_post['body'])
+            post['link_id'] = raw_post['link_id']
+            post['parent_id'] = raw_post['parent_id']
+
+        # selecting fields
+        for attr in self.post_attributes:
+            if attr not in raw_post:  # handling missing values
+                post[attr] = None
+            elif (attr != 'selftext') and (attr != 'title'):  # saving only clean text
+                post[attr] = raw_post[attr]
+
+        return user_id, post, raw_post['created_utc']
+
+    @staticmethod
+    def __save_data(users, path_period_category):
+        # for each user in a period category a json file
+        for user in users:
+            user_filename = os.path.join(path_period_category, f'{user}.json')
+            if os.path.exists(user_filename):
+                with open(user_filename) as fp:
+                    data = json.loads(fp.read())
+
+                    for dt, posts in users[user]['posts'].items():
+                        if dt in data['posts']:
+                            data['posts'][dt].extend(posts)
+                        else:
+                            data['posts'][dt] = posts
+
+                    for dt, coms in users[user]['comments'].items():
+                        if dt in data['comments']:
+                            data['comments'][dt].extend(coms)
+                        else:
+                            data['comments'][dt] = coms
+
+                with open(user_filename, 'w') as fp:
+                    json.dump(data, fp, sort_keys=True, indent=4)
+            else:
+                with open(user_filename, 'w') as fp:
+                    json.dump(users[user], fp, sort_keys=True, indent=4)
+
+    def extract_periodical_data(self, start_date, end_date, categories):
+
         # converting date from format %d/%m/%Y to UNIX timestamp as requested by API
         start_date = int(time.mktime(datetime.datetime.strptime(start_date, "%d/%m/%Y").timetuple()))
         end_date = int(time.mktime(datetime.datetime.strptime(end_date, "%d/%m/%Y").timetuple()))
@@ -173,232 +212,116 @@ class RedditHandler:
         if not os.path.exists(raw_data_folder):
             os.mkdir(raw_data_folder)
 
-        categories_keys = list(categories.keys())
-        i = 0  # to iter over categories keys
-        for category in categories:
-            print(f'Extracting category: {categories_keys[i]}')
-            users = dict()  # users with post & comment shared in different subreddit belonging to the same category
-            for sub in categories[category]:
-                print(f'Extracting subbredit: {sub}')
+        for category, subcats in categories.items():
+            for sub in subcats:
+
                 current_date_post = start_date
-                # current_date_comment = start_date
-                # handling time-period
-                if n_months == 0:
-                    period_post = (datetime.datetime.strptime(real_start_date, "%d/%m/%Y"),
-                                   datetime.datetime.strptime(real_end_date, "%d/%m/%Y"))
-                    period_comment = (datetime.datetime.strptime(real_start_date, "%d/%m/%Y"),
-                                      datetime.datetime.strptime(real_end_date, "%d/%m/%Y"))
-                else:
-                    end_period = datetime.datetime.strptime(real_start_date, "%d/%m/%Y") + relativedelta(
-                        months=+n_months)
-                    period_post = (datetime.datetime.strptime(real_start_date, "%d/%m/%Y"), end_period)
-                    period_comment = (datetime.datetime.strptime(real_start_date, "%d/%m/%Y"), end_period)
 
-                # extracting posts
-                path_period_category = ''
                 if self.extract_post:
-                    posts = self.__post_request_API_periodical(current_date_post, end_date, sub)  # first call to API
-                    old_current = ''
+                    end_flag = True
+                    users = dict()
+                    old_current = current_date_post
+                    while end_flag:
 
-                    while len(
-                            posts) > 0:  # collecting data until there are no more posts to extract in the time
-                        # period considered
+                        if current_date_post > end_date:
+                            end_flag = False
+                            path_category = self.__check_path(category, raw_data_folder)
+                            self.__save_data(users, path_category)
+                            continue
+
+                        posts = self.__post_request_API_periodical(current_date_post, end_date, sub)
+
+                        if len(posts) == 0:
+                            current_date_post = datetime.datetime.utcfromtimestamp(current_date_post).strftime(
+                                "%d/%m/%Y")
+                            current_date_post = datetime.datetime.strptime(current_date_post, "%d/%m/%Y") + \
+                                                relativedelta(days=+1)
+                            current_date_post = int((current_date_post - datetime.datetime(1970, 1, 1)).total_seconds())
+                            continue
+
                         for raw_post in posts:
 
-                            # saving posts for each period
-                            current_date = datetime.datetime.utcfromtimestamp(raw_post['created_utc']).strftime(
-                                "%d/%m/%Y")
-                            condition1_post = datetime.datetime.strptime(current_date, "%d/%m/%Y") >= period_post[1]
-                            condition2_post = (datetime.datetime.strptime(current_date, "%d/%m/%Y") + relativedelta(
-                                days=+1)) >= datetime.datetime.strptime(real_end_date, "%d/%m/%Y")
-                            if condition1_post or condition2_post:
-                                # Saving data: for each category a folder
-                                path_category = os.path.join(raw_data_folder,
-                                                             f'{categories_keys[i]}_{pretty_start_date}_'
-                                                             f'{pretty_end_date}')
-                                if not os.path.exists(path_category):
-                                    os.mkdir(path_category)
+                            if raw_post['author'] in ['[deleted]', 'AutoModerator']:
+                                continue
 
-                                pretty_period0_post = period_post[0].strftime('%d/%m/%Y').replace('/', '-')
-                                pretty_period1_post = period_post[1].strftime('%d/%m/%Y').replace('/', '-')
-                                path_period_category = os.path.join(path_category,
-                                                                    f'{categories_keys[i]}_{pretty_period0_post}_'
-                                                                    f'{pretty_period1_post}')
+                            user, pdescr, current_date_post = self.__process_post(raw_post, category, is_post=True)
 
-                                if not os.path.exists(path_period_category):
-                                    os.mkdir(path_period_category)
+                            if user in users:
 
-                                if condition1_post:
-                                    period_post = (period_post[1], period_post[1] + relativedelta(months=+n_months))
-                                elif condition2_post:
-                                    break
-
-                            # collecting posts
-                            if raw_post['author'] not in ['[deleted]',
-                                                          'AutoModerator']:  # discarding data concerning removed
-                                # users and moderators
-                                user_id = raw_post['author']
-                                post = dict()  # dict to store posts
-                                # adding field category
-                                post['category'] = category
-                                # adding field date in a readable format
-                                post['date'] = datetime.datetime.utcfromtimestamp(raw_post['created_utc']).strftime(
-                                    "%d/%m/%Y")
-                                # cleaning body field
-                                merged_text = raw_post['title'] + ' ' + raw_post['selftext']
-                                post['clean_text'] = clean_raw_text(merged_text)
-                                # adding field time_period in a readable format
-
-                                if n_months != 0:
-                                    post['time_period'] = (
-                                        period_post[0].strftime('%d/%m/%Y'), period_post[1].strftime('%d/%m/%Y'))
+                                if pdescr['date'] in users[user]['posts']:
+                                    users[user]['posts'][pdescr['date']].append(pdescr)
                                 else:
-                                    post['time_period'] = (
-                                        datetime.datetime.utcfromtimestamp(start_date).strftime("%d/%m/%Y"),
-                                        datetime.datetime.utcfromtimestamp(end_date).strftime("%d/%m/%Y"))
-                                # selecting fields 
-                                for attr in self.post_attributes:
-                                    if attr not in raw_post:  # handling missing values
-                                        post[attr] = None
-                                    elif (attr != 'selftext') and (attr != 'title'):  # saving only clean text
-                                        post[attr] = raw_post[attr]
-                                if len(post['clean_text']) > 2:  # avoiding empty posts
-                                    if user_id not in users:
-                                        if self.extract_post and self.extract_comment:
-                                            users[user_id] = {'posts': [], 'comments': []}
-                                        else:
-                                            users[user_id] = {'posts': []}
-                                    users[user_id]['posts'].append(post)
+                                    users[user]['posts'][pdescr['date']] = [pdescr]
+                            else:
+                                users[user] = {'posts': {pdescr['date']: [pdescr]}, 'comments': {}}
 
-                        current_date_post = posts[-1][
-                            'created_utc']  # taking the UNIX timestamp date of the last record extracted
-                        posts = self.__post_request_API_periodical(current_date_post, end_date, sub)
                         pretty_current_date_post = datetime.datetime.utcfromtimestamp(current_date_post).strftime(
                             '%Y-%m-%d')
 
                         if pretty_current_date_post != old_current:
                             print(f'Extracted posts until date: {pretty_current_date_post}')
                             old_current = pretty_current_date_post
-
-                            # for each user in a period category a json file
-                            for user in users:
-                                user_filename = os.path.join(path_period_category, f'{user}.json')
-                                if os.path.exists(user_filename):
-                                    with open(user_filename) as fp:
-                                        data = json.loads(fp.read())
-                                        data['posts'].extend(users[user]['posts'])
-                                    with open(user_filename, 'w') as fp:
-                                        json.dump(data, fp, sort_keys=True, indent=4)
-                                else:
-                                    with open(user_filename, 'w') as fp:
-                                        json.dump(users[user], fp, sort_keys=True, indent=4)
+                            path_category = self.__check_path(category, raw_data_folder)
+                            self.__save_data(users, path_category)
                             users = dict()
 
-                # extracting comments
                 if self.extract_comment:
-                    current_date_comment = start_date
-                    comments = self.__comment_request_API_periodical(current_date_comment, end_date, sub)
-                    old_current = ""
+                    current_date_post = start_date
+
+                    end_flag = True
                     users = dict()
+                    old_current = current_date_post
+                    while end_flag:
 
-                    while len(comments) > 0:  # collecting data until there are no more comments to extract in the time
-                        # period considered
-                        for raw_comment in comments:
-                            # saving comments for each period 
-                            current_date = datetime.datetime.utcfromtimestamp(raw_comment['created_utc']).strftime(
+                        if current_date_post > end_date:
+                            end_flag = False
+                            path_category = self.__check_path(category, raw_data_folder)
+                            self.__save_data(users, path_category)
+                            continue
+
+                        posts = self.__comment_request_API_periodical(current_date_post, end_date, sub)
+
+                        if len(posts) == 0:
+                            current_date_post = datetime.datetime.utcfromtimestamp(current_date_post).strftime(
                                 "%d/%m/%Y")
+                            current_date_post = datetime.datetime.strptime(current_date_post, "%d/%m/%Y") + \
+                                                relativedelta(days=+1)
+                            current_date_post = int((current_date_post - datetime.datetime(1970, 1, 1)).total_seconds())
+                            continue
 
-                            condition1_comment = datetime.datetime.strptime(current_date, "%d/%m/%Y") >= period_comment[
-                                1]
-                            condition2_comment = (datetime.datetime.strptime(current_date, "%d/%m/%Y") + relativedelta(
-                                days=+1)) >= datetime.datetime.strptime(real_end_date, "%d/%m/%Y")
+                        for raw_post in posts:
 
-                            if condition1_comment or condition2_comment:  # saving comment for period
-                                # Saving data: for each category a folder
-                                path_category = os.path.join(raw_data_folder,
-                                                             f'{categories_keys[i]}_{pretty_start_date}_'
-                                                             f'{pretty_end_date}')
+                            if raw_post['author'] in ['[deleted]', 'AutoModerator']:
+                                continue
 
-                                if not os.path.exists(path_category):
-                                    os.mkdir(path_category)
-                                pretty_period0_comment = period_comment[0].strftime('%d/%m/%Y').replace('/', '-')
-                                pretty_period1_comment = period_comment[1].strftime('%d/%m/%Y').replace('/', '-')
-                                path_period_category = os.path.join(path_category,
-                                                                    f'{categories_keys[i]}_{pretty_period0_comment}_'
-                                                                    f'{pretty_period1_comment}')
-                                if not os.path.exists(path_period_category):
-                                    os.mkdir(path_period_category)
+                            user, pdescr, current_date_post = self.__process_post(raw_post, category, is_post=False)
 
-                                if condition1_comment:
-                                    period_comment = (
-                                        period_comment[1], period_comment[1] + relativedelta(months=+n_months))
-                                elif condition2_comment:
-                                    break
-
-                            # collecting comments
-                            if raw_comment['author'] not in ['[deleted]', 'AutoModerator']:
-                                user_id = raw_comment['author']
-                                comment = dict()  # dict to store a comment
-                                # adding field category
-                                comment['category'] = category
-                                # adding field date in a readable format
-                                comment['date'] = datetime.datetime.utcfromtimestamp(
-                                    raw_comment['created_utc']).strftime("%d/%m/%Y")
-                                # cleaning body field
-                                comment['clean_text'] = clean_raw_text(raw_comment['body'])
-                                # adding time_period field in a readable format
-                                if n_months != 0:
-                                    comment['time_period'] = (
-                                        period_comment[0].strftime('%d/%m/%Y'), period_comment[1].strftime('%d/%m/%Y'))
+                            if user in users:
+                                if pdescr['date'] in users[user]['comments']:
+                                    users[user]['comments'][pdescr['date']].append(pdescr)
                                 else:
-                                    comment['time_period'] = (
-                                        datetime.datetime.utcfromtimestamp(start_date).strftime("%d/%m/%Y"),
-                                        datetime.datetime.utcfromtimestamp(end_date).strftime("%d/%m/%Y"))
+                                    users[user]['comments'][pdescr['date']] = [pdescr]
+                            else:
+                                users[user] = {'posts': {}, 'comments': {pdescr['date']: [pdescr]}}
 
-                                # selecting fields
-                                for attr in self.comment_attributes:
-                                    if attr not in raw_comment:  # handling missing values
-                                        comment[attr] = None
-                                    elif attr != 'body':  # saving only clean text
-                                        comment[attr] = raw_comment[attr]
-                                if len(comment['clean_text']) > 2:  # avoiding empty comments
-                                    if user_id not in users:
-                                        if self.extract_post and self.extract_comment:
-                                            users[user_id] = {'posts': [], 'comments': []}
-                                        else:
-                                            users[user_id] = {'comments': []}
-                                    users[user_id]['comments'].append(comment)
-
-                        current_date_comment = comments[-1][
-                            'created_utc']  # taking the UNIX timestamp date of the last record extracted
-                        comments = self.__comment_request_API_periodical(current_date_comment, end_date, sub)
-                        pretty_current_date_comment = datetime.datetime.utcfromtimestamp(current_date_comment).strftime(
+                        pretty_current_date_post = datetime.datetime.utcfromtimestamp(current_date_post).strftime(
                             '%Y-%m-%d')
-                        if pretty_current_date_comment != old_current:
-                            print(f'Extracted comments until date: {pretty_current_date_comment}')
-                            old_current = pretty_current_date_comment
 
-                            # for each user in a period category a json file
-                            for user in users:
-                                user_filename = os.path.join(path_period_category, f'{user}.json')
-                                if os.path.exists(user_filename):
-                                    with open(user_filename) as fp:
-                                        data = json.loads(fp.read())
-                                        data['comments'].extend(users[user]['comments'])
-                                    with open(user_filename, 'w') as fp:
-                                        json.dump(data, fp, sort_keys=True, indent=4)
-                                else:
-                                    with open(user_filename, 'w') as fp:
-                                        json.dump(users[user], fp, sort_keys=True, indent=4)
-
+                        if pretty_current_date_post != old_current:
+                            print(f'Extracted comments until date: {pretty_current_date_post}')
+                            old_current = pretty_current_date_post
+                            path_category = self.__check_path(category, raw_data_folder)
+                            self.__save_data(users, path_category)
                             users = dict()
 
-                print(f'Finished data extraction for subreddit {sub}')
-            # zip category folder 
-            shutil.make_archive(path_category, 'zip', path_category)
-            shutil.rmtree(path_category)
-            print('Done to extract data from category:', categories_keys[i])
-            i += 1  # to iter over categories elements
+    @staticmethod
+    def __check_path(category, raw_data_folder):
+        path_category = os.path.join(raw_data_folder, f'{category}')
+
+        if not os.path.exists(path_category):
+            os.mkdir(path_category)
+
+        return path_category
 
     def extract_user_data(self, users_list, start_date=None, end_date=None):
         """
@@ -640,7 +563,7 @@ class RedditHandler:
 if __name__ == '__main__':
     # initializing RedditHandler
     cwd = os.getcwd()
-    out_fold = os.path.join(cwd, 'RedditHandler_Outputs')
+    out_fold = 'RedditHandler_Outputs'
     ext_posts = True  # True if you want to extract Post data, False otherwise
     ext_comments = True  # True if you want to extract Comment data, False otherwise
     post_attr = ['id', 'author', 'created_utc', 'num_comments', 'over_18', 'is_self', 'score', 'selftext',
@@ -649,18 +572,17 @@ if __name__ == '__main__':
                     'score']  # default
     my_handler = RedditHandler(out_fold, ext_posts, ext_comments, post_attributes=post_attr,
                                comment_attributes=comment_attr)
-    start = '13/12/2018'
-    end = '13/02/2019'
-    selected_categories = {'gun': ['guncontrol']}
-    nmonths = 1  # time_period to consider: if you don't want it n_months = 0
-    my_handler.extract_periodical_data(start, end, selected_categories, nmonths)
-    my_handler.create_network(start, end, selected_categories)
+    start = '1/01/2020'
+    end = '4/01/2020'
+    selected_categories = {'finance': ['wallstreetbets']}
+    my_handler.extract_periodical_data(start, end, selected_categories)
+    # my_handler.create_network(start, end, selected_categories)
     # extracting user data
-    usernames = ['17michela', 'BelleAriel', 'EschewObfuscation10']  # insert one or more Reddit username
+    # usernames = ['17michela', 'BelleAriel', 'EschewObfuscation10']  # insert one or more Reddit username
 
     # None if you want start extracting from Reddit beginning, otherwise specify a date in format %d/%m/%Y
-    start = None
+    # start = None
 
     # None if you want end extracting at today date, otherwise specify a date in format %d/%m/%Y
-    end = None
-    my_handler.extract_user_data(usernames, start_date=start, end_date=end)
+    # end = None
+    # my_handler.extract_user_data(usernames, start_date=start, end_date=end)

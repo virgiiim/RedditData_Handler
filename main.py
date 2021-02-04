@@ -19,12 +19,10 @@ comment_attributes = ['id', 'author', 'created_utc', 'link_id', 'parent_id', 'su
 my_handler = RedditHandler(out_folder, extract_post, extract_comment, post_attributes=post_attributes,
                            comment_attributes=comment_attributes)
 
-# extracting periodical data
-start_date = '02/01/2021'
-end_date = '03/01/2021'
+start_date = f'5/01/2021'
+end_date = f'10/01/2021'
 category = {'finance': ['wallstreetbets']}
-n_months = 1  # time_period to consider: if you don't want it n_months = 0
-my_handler.extract_periodical_data(start_date, end_date, category, n_months)
+my_handler.extract_periodical_data(start_date, end_date, category)
 my_handler.create_network(start_date, end_date, category)
 
 # extracting user data

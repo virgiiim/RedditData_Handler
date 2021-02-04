@@ -178,7 +178,7 @@ class PolarizationClassifier(object):
 
 if __name__ == '__main__':
     cwd = os.getcwd()
-    out_fold = os.path.join(cwd, 'RedditHandler_Outputs')
+    out_fold = os.path.join(cwd, '../RedditHandler_Outputs')
     ext_post = True
     ext_comment = True
     categories = {'gun': ['guncontrol'], 'politics': ['EnoughTrumpSpam', 'Fuckthealtright']}
